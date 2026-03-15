@@ -58,6 +58,7 @@ fn cmd_version() -> Result<(), String> {
     let build = BuildInfo::collect();
     let output = serde_json::json!({
         "name": "aoxc",
+        "name": "aoxcmd",
         "version": build.semver,
         "git_commit": build.git_commit,
         "git_dirty": build.git_dirty,

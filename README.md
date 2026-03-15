@@ -84,6 +84,53 @@ This produces:
 # Optional: embed a certificate fingerprint at build time
 AOXC_EMBED_CERT_PATH=AOXC_DATA/keys/validator-1/certificate.json make package-bin
 ./bin/aoxc version
+# 0) Binary provenance (version + git hash + optional embedded cert digest)
+cargo run -p aoxcmd -- version
+
+# Optional: embed a certificate fingerprint at build time
+AOXC_EMBED_CERT_PATH=AOXC_DATA/keys/validator-1/certificate.json cargo run -p aoxcmd -- version
+
+# 1) Vision summary
+cargo run -p aoxcmd -- vision
+
+# 2) Generate genesis
+cargo run -p aoxcmd -- genesis-init \
+  --path AOXC_DATA/identity/genesis.json \
+  --chain-num 1 \
+  --block-time 6 \
+  --treasury 1000000000
+
+# 3) Key + identity bootstrap
+cargo run -p aoxcmd -- key-bootstrap \
+  --password "change-me" \
+  --base-dir AOXC_DATA/keys \
+  --name validator-1 \
+  --chain AOXC-MAIN \
+  --role validator \
+  --zone core \
+  --issuer AOXC-ROOT-CA \
+  --validity-secs 31536000
+
+# 4) Node bootstrap
+cargo run -p aoxcmd -- node-bootstrap
+
+# 5) Produce a deterministic single block
+cargo run -p aoxcmd -- produce-once --tx "relay-coordination-demo"
+
+# 6) Network smoke
+cargo run -p aoxcmd -- network-smoke
+
+# 7) Storage smoke
+cargo run -p aoxcmd -- storage-smoke --index sqlite
+cargo run -p aoxcmd -- storage-smoke --index redb
+
+# 8) Economy bootstrap (treasury + staking)
+
+# 8) Ekonomi bootstrap (hazine + stake)
+cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
+cargo run -p aoxcmd -- treasury-transfer --to validator-1 --amount 500000000
+cargo run -p aoxcmd -- stake-delegate --staker validator-1 --validator val-core-1 --amount 250000000
+cargo run -p aoxcmd -- economy-status
 ```
 
 ## 7) Operator commands (`aoxc`)
