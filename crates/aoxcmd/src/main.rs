@@ -53,6 +53,7 @@ fn run_cli() -> Result<(), String> {
         "stake-undelegate" => cmd_stake_undelegate(&args[2..]),
         "economy-status" => cmd_economy_status(&args[2..]),
         "runtime-status" => cmd_runtime_status(&args[2..]),
+        "interop-readiness" => cmd_interop_readiness(),
         other => Err(format!("unknown command: {other}")),
     }
 }
@@ -539,6 +540,45 @@ fn cmd_runtime_status(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_interop_readiness() -> Result<(), String> {
+    let output = serde_json::json!({
+        "identity": {
+            "key_algorithms": [
+                {
+                    "name": "Dilithium3",
+                    "role": "post-quantum signing for actor identity",
+                    "status": "implemented in aoxcore::identity::pq_keys"
+                },
+                {
+                    "name": "Argon2id + AES-256-GCM keyfile",
+                    "role": "password-protected local key material at rest",
+                    "status": "implemented in aoxcore::identity::keyfile"
+                }
+            ]
+        },
+        "execution_lanes": [
+            {"lane": "EVM", "priority": "high", "next_step": "RPC and receipt parity test vectors"},
+            {"lane": "WASM", "priority": "high", "next_step": "host-call compatibility matrix"},
+            {"lane": "Sui Move", "priority": "medium", "next_step": "object/state adapter validation"},
+            {"lane": "Cardano UTXO", "priority": "medium", "next_step": "UTXO translator and witness mapping"}
+        ],
+        "production_checklist": [
+            "cross-chain finality assumptions documented per target chain",
+            "bridge adapter fuzz + property testing",
+            "deterministic serialization and replay tests",
+            "observability SLOs and alerting thresholds",
+            "external security audit for bridge and key lifecycle"
+        ]
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output).map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    Ok(())
+}
+
 fn arg_value(args: &[String], key: &str) -> Option<String> {
     args.windows(2).find_map(|window| {
         if window[0] == key {
@@ -551,6 +591,7 @@ fn arg_value(args: &[String], key: &str) -> Option<String> {
 
 fn print_usage() {
     println!(
+        "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  help\n"
         "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  help\n"
     );
 }
