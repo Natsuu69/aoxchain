@@ -105,6 +105,69 @@ impl ConfigValidation {
             return 0;
         }
 
+        }
+
+        if self.max_requests_per_minute == 0 {
+            errors.push("max_requests_per_minute must be greater than zero".to_string());
+        }
+
+        if self.rate_limiter_window_secs == 0 {
+            errors.push("rate_limiter_window_secs must be greater than zero".to_string());
+        }
+
+        if self.rate_limiter_max_tracked_keys == 0 {
+            errors.push("rate_limiter_max_tracked_keys must be greater than zero".to_string());
+        }
+
+        if self.genesis_hash.is_none() {
+            warnings.push("genesis_hash is not configured".to_string());
+        } else if !self.has_valid_genesis_hash() {
+            errors.push("genesis_hash is malformed (expected 0x-prefixed 64-byte hex)".to_string());
+        }
+
+        if !Path::new(&self.tls_cert_path).exists() {
+            warnings.push("tls certificate file is missing".to_string());
+        }
+
+        if !Path::new(&self.tls_key_path).exists() {
+            warnings.push("tls private key file is missing".to_string());
+        }
+
+        if let Some(ca_path) = &self.mtls_ca_cert_path {
+            if !Path::new(ca_path).exists() {
+                warnings.push("mTLS CA certificate file is missing".to_string());
+            }
+        } else {
+            warnings.push("mTLS is disabled".to_string());
+        }
+
+        ConfigValidation { warnings, errors }
+    }
+
+    fn has_valid_genesis_hash(&self) -> bool {
+        let Some(hash) = &self.genesis_hash else {
+            return false;
+        };
+
+        hash.starts_with("0x")
+            && hash.len() == 66
+            && hash[2..].chars().all(|c| c.is_ascii_hexdigit())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfigValidation {
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+impl ConfigValidation {
+    #[must_use]
+    pub fn readiness_score(&self) -> u8 {
+        if !self.errors.is_empty() {
+            return 0;
+        }
+
         let warning_penalty = (self.warnings.len() as u8).saturating_mul(15);
         100_u8.saturating_sub(warning_penalty)
     }
