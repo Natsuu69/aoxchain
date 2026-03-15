@@ -11,6 +11,9 @@ pub struct HealthResponse {
     pub tls_cert_sha256: Option<String>,
     pub readiness_score: u8,
     pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub recommendations: Vec<String>,
+
     pub uptime_secs: u64,
 }
 
@@ -41,4 +44,5 @@ pub struct RpcErrorResponse {
     pub message: String,
     pub retry_after_ms: Option<u64>,
     pub request_id: Option<String>,
+    pub user_hint: Option<String>,
 }
