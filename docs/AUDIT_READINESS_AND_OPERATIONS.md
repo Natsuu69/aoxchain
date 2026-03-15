@@ -31,6 +31,8 @@ cargo run -p aoxcmd -- key-bootstrap --password "change-me"
 cargo run -p aoxcmd -- node-bootstrap
 cargo run -p aoxcmd -- produce-once --tx "audit-path"
 cargo run -p aoxcmd -- network-smoke
+cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
+cargo run -p aoxcmd -- economy-status
 ```
 
 ## 3. Security-Oriented Design Notes
@@ -69,6 +71,7 @@ cargo run -p aoxcmd -- network-smoke
 - [ ] Cryptographic key custody hardening (HSM/external signer design)
 - [x] Structured observability baseline skeleton added (`telemetry::prometheus`, `telemetry::tracing`)
 - [ ] Production-grade metrics/trace pipeline + SLO gates
+- [x] Deterministic treasury+staking CLI state machine added for operator rehearsals
 - [ ] Third-party external security assessment report
 
 ## 6. Recommended Next Implementation Steps

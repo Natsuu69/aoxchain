@@ -89,6 +89,13 @@ cargo run -p aoxcmd -- network-smoke
 # 7) Storage smoke
 cargo run -p aoxcmd -- storage-smoke --index sqlite
 cargo run -p aoxcmd -- storage-smoke --index redb
+
+
+# 8) Ekonomi bootstrap (hazine + stake)
+cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
+cargo run -p aoxcmd -- treasury-transfer --to validator-1 --amount 500000000
+cargo run -p aoxcmd -- stake-delegate --staker validator-1 --validator val-core-1 --amount 250000000
+cargo run -p aoxcmd -- economy-status
 ```
 
 ## Operasyon ve Kalite Dokümanları

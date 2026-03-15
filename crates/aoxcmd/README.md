@@ -26,3 +26,11 @@ cargo check -p aoxcmd
 - Keep API changes synchronized with dependent crates in the same pull request.
 - For consensus/network/identity touching changes, include tests or deterministic command paths.
 - Avoid introducing implicit defaults in critical runtime logic; prefer explicit parameters.
+
+## Extended CLI (Economy + Compatibility)
+
+- `compat-matrix`: lane/transport compatibility görünümü.
+- `economy-init`: hazine bakiyesi ile ekonomi durumunu başlatır.
+- `treasury-transfer`: hazineden hesaba transfer yapar.
+- `stake-delegate` / `stake-undelegate`: stake pozisyonu yönetir.
+- `economy-status`: bakiye ve stake özetini döndürür.

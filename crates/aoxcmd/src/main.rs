@@ -1,3 +1,4 @@
+use aoxcmd::economy::ledger::EconomyState;
 use aoxcmd::keys::{KeyBootstrapRequest, KeyManager, KeyPaths};
 use aoxcmd::node::engine::produce_single_block;
 use aoxcmd::node::state;
@@ -35,12 +36,18 @@ fn run_cli() -> Result<(), String> {
             Ok(())
         }
         "vision" => cmd_vision(),
+        "compat-matrix" => cmd_compat_matrix(),
         "key-bootstrap" => cmd_key_bootstrap(&args[2..]),
         "genesis-init" => cmd_genesis_init(&args[2..]),
         "node-bootstrap" => cmd_node_bootstrap(),
         "produce-once" => cmd_produce_once(&args[2..]),
         "network-smoke" => cmd_network_smoke(),
         "storage-smoke" => cmd_storage_smoke(&args[2..]),
+        "economy-init" => cmd_economy_init(&args[2..]),
+        "treasury-transfer" => cmd_treasury_transfer(&args[2..]),
+        "stake-delegate" => cmd_stake_delegate(&args[2..]),
+        "stake-undelegate" => cmd_stake_undelegate(&args[2..]),
+        "economy-status" => cmd_economy_status(&args[2..]),
         other => Err(format!("unknown command: {other}")),
     }
 }
@@ -61,6 +68,28 @@ fn cmd_vision() -> Result<(), String> {
             .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
     );
 
+    Ok(())
+}
+
+fn cmd_compat_matrix() -> Result<(), String> {
+    let output = serde_json::json!({
+        "execution_lanes": ["EVM", "WASM", "Sui Move", "Cardano UTXO"],
+        "network_surface": ["Gossip", "Discovery", "Sync", "RPC"],
+        "transport_profiles": ["TCP", "UDP", "QUIC"],
+        "compatibility": {
+            "evm_chains": "bridge-compatible via aoxcvm::lanes::evm",
+            "wasm_chains": "bridge-compatible via aoxcvm::lanes::wasm",
+            "move_ecosystem": "bridge-compatible via aoxcvm::lanes::sui_move",
+            "utxo_ecosystem": "bridge-compatible via aoxcvm::lanes::cardano"
+        },
+        "note": "Deterministic coordination is implemented; production interoperability requires chain-specific bridge adapters and audits."
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
     Ok(())
 }
 
@@ -288,6 +317,143 @@ fn cmd_storage_smoke(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_economy_init(args: &[String]) -> Result<(), String> {
+    let state_path =
+        arg_value(args, "--state").unwrap_or_else(|| "AOXC_DATA/economy/state.json".to_string());
+    let treasury_supply: u128 = arg_value(args, "--treasury-supply")
+        .unwrap_or_else(|| "1000000000000".to_string())
+        .parse()
+        .map_err(|_| "--treasury-supply must be a valid u128".to_string())?;
+
+    let mut state = EconomyState::default();
+    state.mint_to_treasury(treasury_supply);
+    state.save(&state_path)?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "state_path": state_path,
+            "treasury_account": state.treasury_account,
+            "treasury_balance": state.treasury_balance(),
+            "total_staked": state.total_staked(),
+        }))
+        .map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    Ok(())
+}
+
+fn cmd_treasury_transfer(args: &[String]) -> Result<(), String> {
+    let state_path =
+        arg_value(args, "--state").unwrap_or_else(|| "AOXC_DATA/economy/state.json".to_string());
+    let to = arg_value(args, "--to").ok_or_else(|| "--to is required".to_string())?;
+    let amount: u128 = arg_value(args, "--amount")
+        .ok_or_else(|| "--amount is required".to_string())?
+        .parse()
+        .map_err(|_| "--amount must be a valid u128".to_string())?;
+
+    let mut state = EconomyState::load_or_default(&state_path)?;
+    let treasury = state.treasury_account.clone();
+    state.transfer(&treasury, &to, amount)?;
+    state.save(&state_path)?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "state_path": state_path,
+            "to": to,
+            "amount": amount,
+            "treasury_balance": state.treasury_balance(),
+            "recipient_balance": state.balances.get(&to).copied().unwrap_or_default(),
+        }))
+        .map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    Ok(())
+}
+
+fn cmd_stake_delegate(args: &[String]) -> Result<(), String> {
+    let state_path =
+        arg_value(args, "--state").unwrap_or_else(|| "AOXC_DATA/economy/state.json".to_string());
+    let staker = arg_value(args, "--staker").ok_or_else(|| "--staker is required".to_string())?;
+    let validator =
+        arg_value(args, "--validator").ok_or_else(|| "--validator is required".to_string())?;
+    let amount: u128 = arg_value(args, "--amount")
+        .ok_or_else(|| "--amount is required".to_string())?
+        .parse()
+        .map_err(|_| "--amount must be a valid u128".to_string())?;
+
+    let mut state = EconomyState::load_or_default(&state_path)?;
+    state.delegate(&staker, &validator, amount)?;
+    state.save(&state_path)?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "state_path": state_path,
+            "staker": staker,
+            "validator": validator,
+            "delegated_amount": amount,
+            "total_staked": state.total_staked(),
+        }))
+        .map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    Ok(())
+}
+
+fn cmd_stake_undelegate(args: &[String]) -> Result<(), String> {
+    let state_path =
+        arg_value(args, "--state").unwrap_or_else(|| "AOXC_DATA/economy/state.json".to_string());
+    let staker = arg_value(args, "--staker").ok_or_else(|| "--staker is required".to_string())?;
+    let validator =
+        arg_value(args, "--validator").ok_or_else(|| "--validator is required".to_string())?;
+    let amount: u128 = arg_value(args, "--amount")
+        .ok_or_else(|| "--amount is required".to_string())?
+        .parse()
+        .map_err(|_| "--amount must be a valid u128".to_string())?;
+
+    let mut state = EconomyState::load_or_default(&state_path)?;
+    state.undelegate(&staker, &validator, amount)?;
+    state.save(&state_path)?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "state_path": state_path,
+            "staker": staker,
+            "validator": validator,
+            "undelegated_amount": amount,
+            "total_staked": state.total_staked(),
+        }))
+        .map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    Ok(())
+}
+
+fn cmd_economy_status(args: &[String]) -> Result<(), String> {
+    let state_path =
+        arg_value(args, "--state").unwrap_or_else(|| "AOXC_DATA/economy/state.json".to_string());
+    let state = EconomyState::load_or_default(&state_path)?;
+
+    let output = serde_json::json!({
+        "state_path": state_path,
+        "treasury_account": state.treasury_account,
+        "treasury_balance": state.treasury_balance(),
+        "total_accounts": state.balances.len(),
+        "total_staked": state.total_staked(),
+        "positions": state.stakes,
+        "balances": state.balances,
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output).map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+    Ok(())
+}
+
 fn arg_value(args: &[String], key: &str) -> Option<String> {
     args.windows(2).find_map(|window| {
         if window[0] == key {
@@ -300,6 +466,6 @@ fn arg_value(args: &[String], key: &str) -> Option<String> {
 
 fn print_usage() {
     println!(
-        "AOXC Command Surface\n\nCommands:\n  vision\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  help\n"
+        "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  help\n"
     );
 }

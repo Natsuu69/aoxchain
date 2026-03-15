@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod app;
 pub mod config;
+pub mod economy;
 pub mod error;
 pub mod keys;
 pub mod logging;
