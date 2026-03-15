@@ -12,7 +12,7 @@
 
 ---
 
-> ⚠️ **Project Status (Humble Notice)**
+> ⚠️ **Project Status **
 >
 > This repository is under active development. While the architecture and modules target production use,
 > it should **not** be treated as mainnet-ready without independent third-party security audits,
@@ -56,23 +56,21 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## 4) Repository Map
-
-| Path | Responsibility |
-|---|---|
-| `crates/aoxcore` | Core protocol primitives (identity, tx, genesis, mempool) |
-| `crates/aoxcunity` | Consensus kernel (quorum, vote, proposer rotation, fork-choice, seal) |
-| `crates/aoxcvm` | Multi-lane execution compatibility layer |
-| `crates/aoxcnet` | Gossip/discovery/sync networking shell |
-| `crates/aoxcrpc` | HTTP / gRPC / WebSocket RPC ingress |
-| `crates/aoxcmd` | Node orchestration and deterministic operator workflows |
-| `crates/aoxckit` | Keyforge and operational cryptographic tooling |
-| `crates/aoxcsdk` | SDK surface for application/integration developers |
-| `docs/` | Architecture, audit-readiness, runbooks, risk and analysis docs |
-
-Detailed crate index: **[`crates/README.md`](crates/README.md)**
 
 ## 5) Deterministic Operator Flow (`aoxcmd`)
+| `crates/aoxcore` | Çekirdek domain primitifleri (identity, tx, genesis, mempool) |
+| `crates/aoxcunity` | Consensus çekirdeği (quorum, vote, proposer rotation, fork-choice, seal) |
+| `crates/aoxcvm` | Çok-lane execution uyumluluk katmanı |
+| `crates/aoxcnet` | Gossip/discovery/sync ağ kabuğu |
+| `crates/aoxcrpc` | HTTP / gRPC / WebSocket RPC giriş katmanı |
+| `crates/aoxcmd` | Node orchestration ve deterministic operatör komutları |
+| `crates/aoxckit` | Keyforge ve operasyonel kriptografik araçlar |
+| `crates/aoxcsdk` | Uygulama/entegrasyon geliştiricileri için SDK yüzeyi |
+| `docs/` | Mimari, audit hazırlığı, runbook, risk ve analiz dokümantasyonu |
+
+Detaylı crate dizini: **[`crates/README.md`](crates/README.md)**
+
+## 5) Deterministik Operatör Akışı (`aoxcmd`)
 
 ```bash
 # 1) Vision summary
@@ -110,6 +108,8 @@ cargo run -p aoxcmd -- storage-smoke --index sqlite
 cargo run -p aoxcmd -- storage-smoke --index redb
 
 # 8) Economy bootstrap (treasury + staking)
+
+# 8) Ekonomi bootstrap (hazine + stake)
 cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
 cargo run -p aoxcmd -- treasury-transfer --to validator-1 --amount 500000000
 cargo run -p aoxcmd -- stake-delegate --staker validator-1 --validator val-core-1 --amount 250000000
@@ -154,5 +154,13 @@ The SDK evolves toward stable integration APIs; track release notes for compatib
 - Keep key material, certificates, and sensitive artifacts under strict operational controls.
 
 ## 10) License
+## 6) Dev/Testnet Kurulum Referansları
+
+- Local script: [`scripts/run-local.sh`](scripts/run-local.sh)
+- Konfigürasyonlar: [`configs/mainnet.toml`](configs/mainnet.toml), [`configs/testnet.toml`](configs/testnet.toml), [`configs/genesis.json`](configs/genesis.json)
+- Container seti: [`Dockerfile`](Dockerfile), [`docker-compose.yaml`](docker-compose.yaml)
+
+
+## 10) Lisans
 
 MIT (`LICENSE`).
