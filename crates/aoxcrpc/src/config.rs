@@ -7,7 +7,11 @@ pub struct RpcConfig {
     pub tls_cert_path: String,
     pub tls_key_path: String,
     pub mtls_ca_cert_path: Option<String>,
+    pub chain_id: String,
+    pub genesis_hash: Option<String>,
     pub max_requests_per_minute: u64,
+    pub rate_limiter_window_secs: u64,
+    pub rate_limiter_max_tracked_keys: usize,
 }
 
 impl Default for RpcConfig {
@@ -19,7 +23,11 @@ impl Default for RpcConfig {
             tls_cert_path: "./tls/server.crt".to_string(),
             tls_key_path: "./tls/server.key".to_string(),
             mtls_ca_cert_path: Some("./tls/ca.crt".to_string()),
+            chain_id: "AOX-MAIN".to_string(),
+            genesis_hash: None,
             max_requests_per_minute: 600,
+            rate_limiter_window_secs: 60,
+            rate_limiter_max_tracked_keys: 100_000,
         }
     }
 }
