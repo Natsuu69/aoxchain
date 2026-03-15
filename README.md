@@ -40,6 +40,7 @@ Odak noktaları:
 | `crates/aoxcrpc` | HTTP / gRPC / WebSocket RPC giriş katmanı |
 | `crates/aoxcmd` | Node orchestration, bootstrap, deterministic smoke komutları |
 | `crates/aoxckit` | Operatör araçları (keyforge vb.) |
+| `crates/aoxchal` | HAL yüzeyi (CPU capability + memory region soyutlaması) |
 | `crates/*` | Destekleyici crate'ler (data, ai, sdk, config, libs, exec, energy, contract...) |
 | `docs/` | Mimari, audit hazırlığı, mainnet blueprint, detaylı analizler |
 | `models/` | Politika/risk model örnekleri |
@@ -88,6 +89,13 @@ cargo run -p aoxcmd -- network-smoke
 # 7) Storage smoke
 cargo run -p aoxcmd -- storage-smoke --index sqlite
 cargo run -p aoxcmd -- storage-smoke --index redb
+
+
+# 8) Ekonomi bootstrap (hazine + stake)
+cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
+cargo run -p aoxcmd -- treasury-transfer --to validator-1 --amount 500000000
+cargo run -p aoxcmd -- stake-delegate --staker validator-1 --validator val-core-1 --amount 250000000
+cargo run -p aoxcmd -- economy-status
 ```
 
 ## Operasyon ve Kalite Dokümanları
@@ -100,3 +108,12 @@ cargo run -p aoxcmd -- storage-smoke --index redb
 ## Lisans
 
 MIT (`LICENSE`).
+
+
+## Mainnet Operasyon Dosyaları
+
+- `configs/genesis.json` — deterministic genesis örneği.
+- `configs/mainnet.toml` / `configs/testnet.toml` — ağ profilleri.
+- `Dockerfile` + `docker-compose.yaml` — containerize node ve 4-node local simülasyon.
+- `Makefile` + `scripts/run-local.sh` — standart build/test/run komutları.
+- `.github/workflows/ci.yml` — workspace check+test CI akışı.
