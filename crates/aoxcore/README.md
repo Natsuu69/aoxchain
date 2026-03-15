@@ -2,27 +2,30 @@
 
 ## Purpose
 
-Core protocol primitives: identity, genesis, transaction model, mempool, and foundational state components.
+`aoxcore` is responsible for the **core protocol primitives** domain within the AOXChain workspace.
 
-## Production Intent
+## Code Scope
 
-This crate is part of the AOXChain relay-oriented mainnet roadmap. Its interfaces are expected to evolve toward:
+- `identity/`
+- `genesis/`
+- `transaction/`
+- `mempool/`
+- `state/`
+- `block/`
 
-- deterministic behavior in consensus-critical paths,
-- explicit and typed error surfaces,
-- testable integration boundaries with other workspace crates,
-- audit-friendly documentation and change control.
+## Operational Notes
 
-## Local Development
+- API and behavior changes should be evaluated for backward impact.
+- Prefer explicit parameters over implicit defaults in critical paths.
+- Security-impacting changes in this crate should be accompanied by test/example updates.
 
-From repository root:
+## Local Validation
 
 ```bash
-cargo check -p aoxcore
+cargo check -p aoxcore && cargo test -p aoxcore
 ```
 
-## Integration Notes
+## Related Components
 
-- Keep API changes synchronized with dependent crates in the same pull request.
-- For consensus/network/identity touching changes, include tests or deterministic command paths.
-- Avoid introducing implicit defaults in critical runtime logic; prefer explicit parameters.
+- Top-level architecture: [`../../README.md`](../../README.md)
+- Crate catalog: [`../README.md`](../README.md)

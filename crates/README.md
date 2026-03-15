@@ -1,47 +1,26 @@
-# AOXChain Crate Index
+# AOXChain Crate Catalog
 
-This index maps workspace crates to their responsibilities and primary entry points.
+This document summarizes **responsibility boundaries** and entry points for crates in the workspace.
 
-## 1) Protocol Core
+## Core Protocol
 
-- [`aoxcore`](aoxcore/README.md): identity, genesis, transaction, mempool, and foundational state primitives.
-- [`aoxcunity`](aoxcunity/README.md): consensus kernel (quorum, voting, proposer rotation, fork-choice, sealing).
-- [`aoxcvm`](aoxcvm/README.md): multi-lane execution compatibility layer (EVM/WASM/Sui/Cardano).
+- [`aoxcore`](aoxcore/README.md): identity, genesis, transactions, mempool, and state primitives
+- [`aoxcunity`](aoxcunity/README.md): consensus flow (quorum/vote/fork-choice/seal)
+- [`aoxcvm`](aoxcvm/README.md): multi-lane execution and VM compatibility
 
-## 2) Networking and API
+## Networking and API
 
-- [`aoxcnet`](aoxcnet/README.md): peer/session/gossip networking and security policies.
-- [`aoxcrpc`](aoxcrpc/README.md): HTTP/gRPC/WebSocket ingress surfaces.
-- [`aoxcsdk`](aoxcsdk/README.md): SDK integration surface for downstream developers.
+- [`aoxcnet`](aoxcnet/README.md): discovery/gossip/sync/transport
+- [`aoxcrpc`](aoxcrpc/README.md): HTTP, gRPC, and WebSocket API layer
+- [`aoxcsdk`](aoxcsdk/README.md): integration-focused SDK surface
 
-## 3) Operations and Tooling
+## Operations and Tooling
 
-- [`aoxcmd`](aoxcmd/README.md): node bootstrap, smoke operations, economy, and compatibility commands.
-- [`aoxckit`](aoxckit/README.md): keyforge, certificate, and identity operational tooling.
-- [`aoxconfig`](aoxconfig/README.md): configuration schema and loading components.
+- [`aoxcmd`](aoxcmd/README.md): node lifecycle, economics, bootstrap, and smoke commands
+- [`aoxckit`](aoxckit/README.md): keyforge, certificate, and identity tooling
+- [`aoxconfig`](aoxconfig/README.md): configuration models
 
-## 4) Supporting Modules
-Bu dizin, AOXChain workspace içindeki crate'lerin sorumluluk haritasını ve başlangıç noktalarını içerir.
-
-## 1) Protokol Çekirdeği
-
-- [`aoxcore`](aoxcore/README.md): identity, genesis, transaction, mempool ve temel state primitifleri.
-- [`aoxcunity`](aoxcunity/README.md): consensus kernel (quorum, vote, proposer, fork-choice, seal).
-- [`aoxcvm`](aoxcvm/README.md): çoklu execution lane uyumluluk katmanı (EVM/WASM/Sui/Cardano).
-
-## 2) Ağ ve API Katmanı
-
-- [`aoxcnet`](aoxcnet/README.md): peer/sesssion/gossip ağı ve güvenlik politikaları.
-- [`aoxcrpc`](aoxcrpc/README.md): HTTP/gRPC/WebSocket RPC giriş yüzeyleri.
-- [`aoxcsdk`](aoxcsdk/README.md): dış geliştiriciler için SDK entegrasyon yüzeyi.
-
-## 3) Operasyon ve Araçlar
-
-- [`aoxcmd`](aoxcmd/README.md): node bootstrap, smoke, ekonomi ve uyumluluk komutları.
-- [`aoxckit`](aoxckit/README.md): keyforge, sertifika ve kimlik operasyon araçları.
-- [`aoxconfig`](aoxconfig/README.md): konfigürasyon şemaları ve yükleme bileşenleri.
-
-## 4) Yardımcı Modüller
+## Supporting Crates
 
 - [`aoxcai`](aoxcai/README.md)
 - [`aoxcdata`](aoxcdata/README.md)
@@ -52,17 +31,10 @@ Bu dizin, AOXChain workspace içindeki crate'lerin sorumluluk haritasını ve ba
 - [`aoxcontract`](aoxcontract/README.md)
 - [`aoxchal`](aoxchal/README.md)
 
-## 5) Paired Documentation
+## Governance Rule
 
-- Main project overview: [`../README.md`](../README.md)
-- Audit/operations guide: [`../docs/AUDIT_READINESS_AND_OPERATIONS.md`](../docs/AUDIT_READINESS_AND_OPERATIONS.md)
-- Risk notice: [`../docs/SECURITY_AND_RISK_NOTICE_TR.md`](../docs/SECURITY_AND_RISK_NOTICE_TR.md)
+Any PR that changes a crate responsibility boundary should include:
 
-> Note: Crate boundaries may evolve over time. Critical API changes should be documented and accompanied by tests.
-## 5) Dökümantasyonla birlikte kullanım
-
-- Ana proje anlatımı: [`../README.md`](../README.md)
-- Audit/operasyon rehberi: [`../docs/AUDIT_READINESS_AND_OPERATIONS.md`](../docs/AUDIT_READINESS_AND_OPERATIONS.md)
-- Risk bildirimi: [`../docs/SECURITY_AND_RISK_NOTICE_TR.md`](../docs/SECURITY_AND_RISK_NOTICE_TR.md)
-
-> Not: Crate sınırları zaman içinde evrilebilir; kritik API değişiklikleri ilgili README + testler ile birlikte güncellenmelidir.
+1. README revision for the affected crate
+2. Required test/example updates
+3. Backward-compatibility notes (if applicable)

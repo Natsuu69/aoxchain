@@ -2,10 +2,18 @@
 
 ## Purpose
 
-RPC ingress surfaces (HTTP, gRPC, WebSocket) for operator and integration-facing APIs.
+`aoxcrpc` is responsible for the **API ingress layer (HTTP/gRPC/WebSocket)** domain within the AOXChain workspace.
 
-## Production Intent
+## Code Scope
 
+- `proto/`
+- `src/middleware/`
+- `src/grpc/`
+- `src/http/`
+- `src/websocket/`
+- `src/config.rs`
+
+## Operational Notes
 This crate now includes a production-oriented secure API skeleton:
 
 - `proto/` definitions for binary gRPC contracts,
@@ -14,16 +22,17 @@ This crate now includes a production-oriented secure API skeleton:
 - HTTP health + Prometheus metrics snapshot export,
 - websocket event framing for block confirmations.
 
-## Local Development
+- API and behavior changes should be evaluated for backward impact.
+- Prefer explicit parameters over implicit defaults in critical paths.
+- Security-impacting changes in this crate should be accompanied by test/example updates.
 
-From repository root:
+## Local Validation
 
 ```bash
 cargo check -p aoxcrpc
 ```
 
-## Integration Notes
+## Related Components
 
-- Keep API changes synchronized with dependent crates in the same pull request.
-- For consensus/network/identity touching changes, include tests or deterministic command paths.
-- Avoid introducing implicit defaults in critical runtime logic; prefer explicit parameters.
+- Top-level architecture: [`../../README.md`](../../README.md)
+- Crate catalog: [`../README.md`](../README.md)
