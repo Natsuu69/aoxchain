@@ -14,6 +14,12 @@ It is intentionally technical and implementation-oriented, intended for:
 
 The current deterministic smoke path is centered on `aoxcmd`:
 
+1. Strategy introspection (`vision`)
+2. Genesis materialization (`genesis-init`)
+3. Key lifecycle bootstrap (`key-bootstrap`)
+4. Node bootstrap (`node-bootstrap`)
+5. Single-block production and local finalization attempt (`produce-once`)
+6. Network compatibility check against gossip stub (`network-smoke`)
 1. Key lifecycle bootstrap (`key-bootstrap`)
 2. Node bootstrap (`node-bootstrap`)
 3. Single-block production and local finalization attempt (`produce-once`)
@@ -22,6 +28,8 @@ The current deterministic smoke path is centered on `aoxcmd`:
 ### Canonical commands
 
 ```bash
+cargo run -p aoxcmd -- vision
+cargo run -p aoxcmd -- genesis-init --path AOXC_DATA/identity/genesis.json
 cargo run -p aoxcmd -- key-bootstrap --password "change-me"
 cargo run -p aoxcmd -- node-bootstrap
 cargo run -p aoxcmd -- produce-once --tx "audit-path"

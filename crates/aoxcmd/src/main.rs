@@ -3,6 +3,8 @@ use aoxcmd::node::engine::produce_single_block;
 use aoxcmd::node::state;
 
 use aoxcnet::gossip::consensus_gossip::GossipEngine;
+use aoxcore::genesis::config::{GenesisConfig, TREASURY_ACCOUNT};
+use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
 use aoxcunity::messages::ConsensusMessage;
 use aoxcunity::vote::{Vote, VoteKind};
@@ -30,6 +32,9 @@ fn run_cli() -> Result<(), String> {
             print_usage();
             Ok(())
         }
+        "vision" => cmd_vision(),
+        "key-bootstrap" => cmd_key_bootstrap(&args[2..]),
+        "genesis-init" => cmd_genesis_init(&args[2..]),
         "key-bootstrap" => cmd_key_bootstrap(&args[2..]),
         "node-bootstrap" => cmd_node_bootstrap(),
         "produce-once" => cmd_produce_once(&args[2..]),
@@ -38,10 +43,31 @@ fn run_cli() -> Result<(), String> {
     }
 }
 
+fn cmd_vision() -> Result<(), String> {
+    let output = serde_json::json!({
+        "chain_positioning": "interop relay-oriented coordination chain",
+        "primary_goal": "cross-chain compatibility and deterministic coordination over raw throughput",
+        "execution_strategy": "multi-lane model compatible with heterogeneous external networks",
+        "identity_model": "post-quantum capable key/certificate/passport pipeline",
+        "consensus_model": "quorum-based proposer/vote/finalization with explicit rotation",
+        "status": "pre-mainnet; deterministic local smoke path available"
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
+}
+
 fn cmd_key_bootstrap(args: &[String]) -> Result<(), String> {
     let base_dir = arg_value(args, "--base-dir").unwrap_or_else(|| "AOXC_DATA/keys".to_string());
     let name = arg_value(args, "--name").unwrap_or_else(|| "node".to_string());
     let chain = arg_value(args, "--chain").unwrap_or_else(|| "AOXC-MAIN".to_string());
+    let role = arg_value(args, "--role").unwrap_or_else(|| "relay".to_string());
+    let zone = arg_value(args, "--zone").unwrap_or_else(|| "global".to_string());
     let role = arg_value(args, "--role").unwrap_or_else(|| "validator".to_string());
     let zone = arg_value(args, "--zone").unwrap_or_else(|| "core".to_string());
     let issuer = arg_value(args, "--issuer").unwrap_or_else(|| "AOXC-ROOT-CA".to_string());
@@ -71,6 +97,53 @@ fn cmd_key_bootstrap(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_genesis_init(args: &[String]) -> Result<(), String> {
+    let path =
+        arg_value(args, "--path").unwrap_or_else(|| "AOXC_DATA/identity/genesis.json".to_string());
+    let chain_num: u32 = arg_value(args, "--chain-num")
+        .unwrap_or_else(|| "1".to_string())
+        .parse()
+        .map_err(|_| "--chain-num must be a valid u32".to_string())?;
+    let block_time: u64 = arg_value(args, "--block-time")
+        .unwrap_or_else(|| "6".to_string())
+        .parse()
+        .map_err(|_| "--block-time must be a valid u64".to_string())?;
+    let treasury: u128 = arg_value(args, "--treasury")
+        .unwrap_or_else(|| "1000000000".to_string())
+        .parse()
+        .map_err(|_| "--treasury must be a valid u128".to_string())?;
+
+    let mut config = GenesisConfig::new();
+    config.chain_num = chain_num;
+    config.chain_id = GenesisConfig::generate_chain_id(chain_num);
+    config.block_time = block_time;
+    config.treasury = treasury;
+    config.add_account(TREASURY_ACCOUNT.to_string(), treasury);
+
+    config.validate()?;
+    GenesisLoader::save(&config, &path).map_err(|error| error.to_string())?;
+
+    let loaded = GenesisLoader::load(&path).map_err(|error| error.to_string())?;
+
+    let output = serde_json::json!({
+        "saved_path": path,
+        "chain_num": loaded.config.chain_num,
+        "chain_id": loaded.config.chain_id,
+        "block_time": loaded.config.block_time,
+        "treasury": loaded.config.treasury,
+        "total_supply": loaded.config.total_supply(),
+        "state_hash": loaded.config.state_hash()
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
+}
+
 fn cmd_node_bootstrap() -> Result<(), String> {
     let node = state::setup().map_err(|error| error.to_string())?;
 
@@ -94,6 +167,7 @@ fn cmd_node_bootstrap() -> Result<(), String> {
 }
 
 fn cmd_produce_once(args: &[String]) -> Result<(), String> {
+    let tx = arg_value(args, "--tx").unwrap_or_else(|| "AOXC_RELAY_DEMO_TX".to_string());
     let tx = arg_value(args, "--tx").unwrap_or_else(|| "AOXC_DEMO_TX".to_string());
 
     let mut node = state::setup().map_err(|error| error.to_string())?;
@@ -158,6 +232,7 @@ fn arg_value(args: &[String], key: &str) -> Option<String> {
 
 fn print_usage() {
     println!(
+        "AOXC Command Surface\n\nCommands:\n  vision\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  help\n"
         "AOXC Command Surface\n\nCommands:\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  help\n"
     );
 }
