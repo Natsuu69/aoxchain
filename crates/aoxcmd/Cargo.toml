@@ -11,6 +11,7 @@ async-trait = { workspace = true }
 aoxcai = { path = "../aoxcai" }
 aoxcore = { path = "../aoxcore" }
 aoxcunity = { path = "../aoxcunity" }
+aoxcnet = { path = "../aoxcnet" }
 serde_json = { workspace = true }
 hex = { workspace = true }
 
