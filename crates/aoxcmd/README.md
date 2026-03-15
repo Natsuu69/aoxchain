@@ -1,10 +1,27 @@
-# aoxcmd
+# aoxcmd (`aoxc` binary)
 
 ## Purpose
 
 Node orchestration command surface and deterministic bootstrap/produce operational workflows.
 
-## Production Intent
+## Binary name
+
+The CLI is exposed as **`aoxc`**.
+
+From repository root:
+
+```bash
+cargo run -p aoxcmd --bin aoxc -- version
+```
+
+For production-style local packaging:
+
+```bash
+make package-bin
+./bin/aoxc version
+```
+
+## Production intent
 
 This crate is part of the AOXChain relay-oriented mainnet roadmap. Its interfaces are expected to evolve toward:
 
@@ -13,24 +30,8 @@ This crate is part of the AOXChain relay-oriented mainnet roadmap. Its interface
 - testable integration boundaries with other workspace crates,
 - audit-friendly documentation and change control.
 
-## Local Development
-
-From repository root:
-
-```bash
-cargo check -p aoxcmd
-```
-
-## Integration Notes
+## Integration notes
 
 - Keep API changes synchronized with dependent crates in the same pull request.
 - For consensus/network/identity touching changes, include tests or deterministic command paths.
 - Avoid introducing implicit defaults in critical runtime logic; prefer explicit parameters.
-
-## Extended CLI (Economy + Compatibility)
-
-- `compat-matrix`: lane/transport compatibility overview.
-- `economy-init`: initializes economy state with treasury supply.
-- `treasury-transfer`: moves funds from treasury to an account.
-- `stake-delegate` / `stake-undelegate`: manages staking positions.
-- `economy-status`: returns balance and staking summaries.
