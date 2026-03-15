@@ -18,6 +18,25 @@ use aoxcunity::vote::{Vote, VoteKind};
 use std::env;
 use std::process;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CliLanguage {
+    En,
+    Tr,
+    Es,
+    De,
+}
+
+impl CliLanguage {
+    fn from_code(input: &str) -> Self {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "tr" | "tr-tr" | "turkish" | "türkçe" => Self::Tr,
+            "es" | "es-es" | "spanish" | "español" => Self::Es,
+            "de" | "de-de" | "german" | "deutsch" => Self::De,
+            _ => Self::En,
+        }
+    }
+}
+
 fn main() {
     if let Err(error) = run_cli() {
         eprintln!("AOXCMD_ERROR: {error}");
@@ -27,16 +46,17 @@ fn main() {
 
 fn run_cli() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
+    let lang = detect_language(&args[1..]);
 
     if args.len() < 2 {
-        print_usage();
+        print_usage(lang);
         return Ok(());
     }
 
     match args[1].as_str() {
         "version" | "--version" | "-V" => cmd_version(),
         "help" | "--help" | "-h" => {
-            print_usage();
+            print_usage(lang);
             Ok(())
         }
         "vision" => cmd_vision(),
@@ -55,7 +75,25 @@ fn run_cli() -> Result<(), String> {
         "runtime-status" => cmd_runtime_status(&args[2..]),
         "interop-readiness" => cmd_interop_readiness(),
         "interop-gate" => cmd_interop_gate(&args[2..]),
-        other => Err(format!("unknown command: {other}")),
+        other => Err(localized_unknown_command(lang, other)),
+    }
+}
+
+fn detect_language(args: &[String]) -> CliLanguage {
+    if let Some(explicit) = arg_value(args, "--lang") {
+        return CliLanguage::from_code(&explicit);
+    }
+
+    let from_env = env::var("AOXC_LANG").unwrap_or_else(|_| "en".to_string());
+    CliLanguage::from_code(&from_env)
+}
+
+fn localized_unknown_command(lang: CliLanguage, command: &str) -> String {
+    match lang {
+        CliLanguage::Tr => format!("bilinmeyen komut: {command}"),
+        CliLanguage::Es => format!("comando desconocido: {command}"),
+        CliLanguage::De => format!("unbekannter befehl: {command}"),
+        CliLanguage::En => format!("unknown command: {command}"),
     }
 }
 
@@ -705,6 +743,25 @@ fn assert_mainnet_key_policy(args: &[String], profile: &str) -> Result<(), Strin
     )
 }
 
+fn print_usage(lang: CliLanguage) {
+    println!("{}", usage_text(lang));
+}
+
+fn usage_text(lang: CliLanguage) -> &'static str {
+    match lang {
+        CliLanguage::Tr => {
+            "AOXC Komut Yüzeyi\n\nKomutlar:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (veya AOXC_LANG ortam değişkeni)\n"
+        }
+        CliLanguage::Es => {
+            "Superficie de Comandos AOXC\n\nComandos:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (o variable AOXC_LANG)\n"
+        }
+        CliLanguage::De => {
+            "AOXC Kommandooberfläche\n\nBefehle:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (oder AOXC_LANG Umgebungsvariable)\n"
+        }
+        CliLanguage::En => {
+            "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (or AOXC_LANG environment variable)\n"
+        }
+    }
 fn print_usage() {
     println!(
         "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n"
@@ -713,6 +770,10 @@ fn print_usage() {
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        CliLanguage, arg_bool_value, assert_mainnet_key_policy, bootstrap_defaults,
+        detect_language, localized_unknown_command, usage_text,
+    };
     use super::{arg_bool_value, assert_mainnet_key_policy, bootstrap_defaults};
 
     #[test]
@@ -754,5 +815,35 @@ mod tests {
 
         let args = vec![];
         assert!(assert_mainnet_key_policy(&args, "testnet").is_ok());
+    }
+
+    #[test]
+    fn detect_language_prefers_explicit_flag() {
+        let args = vec!["help".to_string(), "--lang".to_string(), "tr".to_string()];
+        assert_eq!(detect_language(&args), CliLanguage::Tr);
+    }
+
+    #[test]
+    fn usage_text_contains_localized_headers() {
+        assert!(usage_text(CliLanguage::En).contains("AOXC Command Surface"));
+        assert!(usage_text(CliLanguage::Tr).contains("AOXC Komut Yüzeyi"));
+        assert!(usage_text(CliLanguage::Es).contains("Superficie de Comandos AOXC"));
+        assert!(usage_text(CliLanguage::De).contains("AOXC Kommandooberfläche"));
+    }
+
+    #[test]
+    fn unknown_command_is_localized() {
+        assert_eq!(
+            localized_unknown_command(CliLanguage::Tr, "foo"),
+            "bilinmeyen komut: foo"
+        );
+        assert_eq!(
+            localized_unknown_command(CliLanguage::Es, "foo"),
+            "comando desconocido: foo"
+        );
+        assert_eq!(
+            localized_unknown_command(CliLanguage::De, "foo"),
+            "unbekannter befehl: foo"
+        );
     }
 }
