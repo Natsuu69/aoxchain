@@ -1,198 +1,61 @@
-<div align="center">
+# AOXChain
 
-# 🔷 AOXChain
+AOXChain is a **multi-crate Rust blockchain workspace** focused on deterministic behavior, auditability, and operational security. The repository consolidates core protocol logic, consensus, networking, API ingress, execution compatibility, and operator tooling in a single workspace.
 
-**Interoperability-first relay chain architecture for deterministic cross-chain coordination.**
+## 1. Project Scope
 
-[![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?logo=rust)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Workspace](https://img.shields.io/badge/Workspace-Multi%20Crate-6f42c1)](Cargo.toml)
+The AOXChain architecture is organized across these primary domains:
 
-</div>
+- **Core protocol (`aoxcore`)**: identity, genesis, transactions, mempool, and state primitives.
+- **Consensus (`aoxcunity`)**: quorum, voting, fork-choice, proposer rotation, and sealing.
+- **Networking (`aoxcnet`)**: discovery, gossip, sync, and transport abstractions.
+- **API ingress (`aoxcrpc`)**: HTTP + gRPC + WebSocket interfaces and security middleware.
+- **Execution compatibility (`aoxcvm`)**: multi-VM/lane routing and host interfaces.
+- **Operational tooling (`aoxcmd`, `aoxckit`)**: node lifecycle, economics commands, and keyforge workflows.
 
----
-
-> ⚠️ **Project status**
->
-> AOXChain is under active development. It is **not mainnet-ready** without independent audits,
-> economic attack simulation, stress/chaos testing, and long-running production evidence.
-
-## 1) What is AOXChain?
-
-AOXChain is a relay-chain-oriented Rust workspace designed for deterministic cross-chain coordination.
-
-Core focus areas:
-- interoperability across heterogeneous chains,
-- auditable consensus and identity surfaces,
-- multi-lane execution model (EVM, WASM, Sui Move, Cardano adapters),
-- operationally testable node workflows,
-- audit-readiness and disciplined change management.
-
-## 2) Networking stack (libp2p status)
-
-Current networking in this repository uses **internal gossip/discovery/sync abstractions** in `aoxcnet`.
-There is **no direct `libp2p` dependency wired as the active transport layer** in the current codebase.
-`aoxcnet` is structured so socket/QUIC transport integration can be expanded later.
-
-## 3) Production readiness gap checklist
-
-To move from dev/test readiness to production readiness, complete at least:
-
-1. **Independent security audits** (consensus, identity, crypto boundaries, networking),
-2. **Threat modeling + abuse cases** for P2P, RPC, key lifecycle, and operator workflows,
-3. **Supply-chain hardening** (SBOM, signed releases, provenance verification, artifact policy),
-4. **Operational hardening** (SLOs, alerting, incident runbooks, backup/restore drills),
-5. **Performance and chaos testing** (fault injection, partition tests, replay/reorg scenarios),
-6. **Economic security validation** (incentive model, adversarial simulation, stress assumptions),
-7. **Release process discipline** (version/tag policy, changelog gates, rollback playbooks).
-
-## 4) Quick start checks
+## 2. Quick Start
 
 ```bash
+cargo fmt --all
 cargo check --workspace
 cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## 5) Build a production-style local binary (`aoxc`)
+Local CLI validation:
 
 ```bash
-# Builds release binary and packages it into ./bin/aoxc
-make package-bin
-
-# Run local smoke flow via packaged binary (not cargo run)
-make run-local
-```
-
-This produces:
-- `target/release/aoxc`
-- `bin/aoxc`
-
-## 6) Binary provenance and version tracking
-
-`aoxc` now exposes build provenance metadata:
-- semantic version,
-- git commit hash,
-- dirty/clean source state,
-- `SOURCE_DATE_EPOCH`,
-- optional embedded certificate SHA-256.
-
-```bash
-# Build and print provenance metadata
-./bin/aoxc version
-
-# Optional: embed a certificate fingerprint at build time
-AOXC_EMBED_CERT_PATH=AOXC_DATA/keys/validator-1/certificate.json make package-bin
-./bin/aoxc version
-# 0) Binary provenance (version + git hash + optional embedded cert digest)
 cargo run -p aoxcmd -- version
-
-# Optional: embed a certificate fingerprint at build time
-AOXC_EMBED_CERT_PATH=AOXC_DATA/keys/validator-1/certificate.json cargo run -p aoxcmd -- version
-
-# 1) Vision summary
 cargo run -p aoxcmd -- vision
-
-# 2) Generate genesis
-cargo run -p aoxcmd -- genesis-init \
-  --path AOXC_DATA/identity/genesis.json \
-  --chain-num 1 \
-  --block-time 6 \
-  --treasury 1000000000
-
-# 3) Key + identity bootstrap
-cargo run -p aoxcmd -- key-bootstrap \
-  --password "change-me" \
-  --base-dir AOXC_DATA/keys \
-  --name validator-1 \
-  --chain AOXC-MAIN \
-  --role validator \
-  --zone core \
-  --issuer AOXC-ROOT-CA \
-  --validity-secs 31536000
-
-# 4) Node bootstrap
-cargo run -p aoxcmd -- node-bootstrap
-
-# 5) Produce a deterministic single block
-cargo run -p aoxcmd -- produce-once --tx "relay-coordination-demo"
-
-# 6) Network smoke
-cargo run -p aoxcmd -- network-smoke
-
-# 7) Storage smoke
-cargo run -p aoxcmd -- storage-smoke --index sqlite
-cargo run -p aoxcmd -- storage-smoke --index redb
-
-# 8) Economy bootstrap (treasury + staking)
-
-# 8) Ekonomi bootstrap (hazine + stake)
-cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
-cargo run -p aoxcmd -- treasury-transfer --to validator-1 --amount 500000000
-cargo run -p aoxcmd -- stake-delegate --staker validator-1 --validator val-core-1 --amount 250000000
-cargo run -p aoxcmd -- economy-status
 ```
 
-## 7) Operator commands (`aoxc`)
+## 3. Production Readiness Note
 
-```bash
-./bin/aoxc vision
-./bin/aoxc compat-matrix
-./bin/aoxc genesis-init --path AOXC_DATA/identity/genesis.json --chain-num 1 --block-time 6 --treasury 1000000000
-./bin/aoxc key-bootstrap --password "change-me" --base-dir AOXC_DATA/keys --name validator-1 --chain AOXC-MAIN --role validator --zone core --issuer AOXC-ROOT-CA --validity-secs 31536000
-./bin/aoxc node-bootstrap
-./bin/aoxc produce-once --tx "relay-coordination-demo"
-./bin/aoxc network-smoke
-./bin/aoxc storage-smoke --index sqlite
-./bin/aoxc economy-init --treasury-supply 1000000000000
-./bin/aoxc treasury-transfer --to validator-1 --amount 500000000
-./bin/aoxc stake-delegate --staker validator-1 --validator val-core-1 --amount 250000000
-./bin/aoxc economy-status
-```
+This repository is under active development. Before production deployment, at minimum complete:
 
-## 8) Repository map
+1. Independent security audits (consensus, identity, networking, RPC)
+2. Threat modeling and adversarial scenario validation
+3. Performance and resilience testing (stress/chaos/partition)
+4. Operational runbooks, SLO/SLA targets, and observability policies
+5. Release, rollback, and artifact provenance controls
 
-| Path | Purpose |
+## 4. Repository Map
+
+Detailed crate index: [`crates/README.md`](crates/README.md)
+
+| Path | Responsibility |
 |---|---|
-| `crates/aoxcore` | Core domain primitives (identity, tx, genesis, mempool) |
-| `crates/aoxcunity` | Consensus core (quorum, vote, proposer rotation, fork-choice, seal) |
-| `crates/aoxcvm` | Multi-lane execution compatibility layer |
-| `crates/aoxcnet` | Gossip/discovery/sync network shell |
-| `crates/aoxcrpc` | HTTP / gRPC / WebSocket RPC entry layer |
-| `crates/aoxcmd` | Node orchestration and deterministic operator commands |
-| `crates/aoxckit` | Keyforge and operational crypto tooling |
-| `crates/aoxcsdk` | SDK surface for integration developers |
-| `docs/` | Architecture, audit readiness, operations, risk docs |
+| `crates/aoxcore` | Core protocol domain primitives |
+| `crates/aoxcunity` | Consensus engine |
+| `crates/aoxcnet` | P2P networking layer |
+| `crates/aoxcrpc` | API ingress layer |
+| `crates/aoxcvm` | Execution compatibility layer |
+| `crates/aoxcmd` | Node and operations command surface |
+| `crates/aoxckit` | Keyforge/certificate tooling |
 
-Detailed crate index: **[`crates/README.md`](crates/README.md)**
+## 5. Documentation Policy
 
-## 9) Dev/testnet references
+README files must remain synchronized with code changes. Any critical behavior update should include a README revision in the same PR.
 
-- Local script: [`scripts/run-local.sh`](scripts/run-local.sh)
-- Config profiles: [`configs/mainnet.toml`](configs/mainnet.toml), [`configs/testnet.toml`](configs/testnet.toml), [`configs/genesis.json`](configs/genesis.json)
-- Container setup: [`Dockerfile`](Dockerfile), [`docker-compose.yaml`](docker-compose.yaml)
-
-## 10) Documentation hub
-
-### Operations + audit
-- [`docs/AUDIT_READINESS_AND_OPERATIONS.md`](docs/AUDIT_READINESS_AND_OPERATIONS.md)
-- [`docs/P2P_AUDIT_GUIDE_EN.md`](docs/P2P_AUDIT_GUIDE_EN.md)
-
-### Architecture + roadmap
-- [`docs/RELAY_CHAIN_MAINNET_BLUEPRINT.md`](docs/RELAY_CHAIN_MAINNET_BLUEPRINT.md)
-- [`docs/TEKNIK_DERIN_ANALIZ_TR.md`](docs/TEKNIK_DERIN_ANALIZ_TR.md)
-- [`docs/REPO_GAP_ANALIZI_TR.md`](docs/REPO_GAP_ANALIZI_TR.md)
-
-### Responsible use + risk notice
-- [`docs/SECURITY_AND_RISK_NOTICE_TR.md`](docs/SECURITY_AND_RISK_NOTICE_TR.md)
-
-## 11) Contribution and security discipline
-
-- Changes touching consensus/identity/networking must include tests.
-- Keep linting clean (`clippy -D warnings`).
-- For large changes, include design notes, threat model updates, and rollback plans.
-- Keep key material, certificates, and sensitive artifacts under strict operational controls.
-
-## 12) License
+## 6. License
 
 MIT (`LICENSE`).

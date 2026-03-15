@@ -1,10 +1,27 @@
 # aoxchal
 
-Hardware abstraction layer (HAL) facade for AOXChain.
+## Purpose
 
-## Scope
-- CPU capability detection for crypto fast paths.
-- Memory region facade for future mmap-backed allocators.
+`aoxchal` is responsible for the **hardware abstraction (HAL) support utilities** domain within the AOXChain workspace.
 
-## Status
-Current implementation provides deterministic, portable placeholders that compile in all workspace targets and can be replaced with platform-specific backends incrementally.
+## Code Scope
+
+- `cpu_opt.rs`
+- `mem_manager.rs`
+
+## Operational Notes
+
+- API and behavior changes should be evaluated for backward impact.
+- Prefer explicit parameters over implicit defaults in critical paths.
+- Security-impacting changes in this crate should be accompanied by test/example updates.
+
+## Local Validation
+
+```bash
+cargo check -p aoxchal
+```
+
+## Related Components
+
+- Top-level architecture: [`../../README.md`](../../README.md)
+- Crate catalog: [`../README.md`](../README.md)
