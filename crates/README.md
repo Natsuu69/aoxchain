@@ -7,6 +7,6 @@ This directory contains the AOXChain multi-crate workspace implementation.
 - **Protocol Core**: `aoxcore`, `aoxcunity`, `aoxcvm`
 - **Network & API**: `aoxcnet`, `aoxcrpc`, `aoxcsdk`
 - **Operations & Tooling**: `aoxcmd`, `aoxckit`, `aoxconfig`
-- **Auxiliary Modules**: `aoxcai`, `aoxcexec`, `aoxcdata`, `aoxcenergy`, `aoxclibs`, `aoxcmob`, `aoxcontract`
+- **Auxiliary Modules**: `aoxcai`, `aoxcexec`, `aoxcdata`, `aoxcenergy`, `aoxclibs`, `aoxcmob`, `aoxcontract`, `aoxchal`
 
 Each crate includes its own `README.md` with purpose and local development guidance.

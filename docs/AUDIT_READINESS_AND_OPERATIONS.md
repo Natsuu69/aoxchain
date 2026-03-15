@@ -20,10 +20,7 @@ The current deterministic smoke path is centered on `aoxcmd`:
 4. Node bootstrap (`node-bootstrap`)
 5. Single-block production and local finalization attempt (`produce-once`)
 6. Network compatibility check against gossip stub (`network-smoke`)
-1. Key lifecycle bootstrap (`key-bootstrap`)
-2. Node bootstrap (`node-bootstrap`)
-3. Single-block production and local finalization attempt (`produce-once`)
-4. Network compatibility check against gossip stub (`network-smoke`)
+7. Storage backend smoke (`storage-smoke --index sqlite|redb`)
 
 ### Canonical commands
 
@@ -70,7 +67,8 @@ cargo run -p aoxcmd -- network-smoke
 - [x] Deterministic one-block execution flow available from CLI
 - [ ] Multi-node adversarial consensus simulation suite
 - [ ] Cryptographic key custody hardening (HSM/external signer design)
-- [ ] Structured observability baseline (metrics, trace correlation IDs, SLO gates)
+- [x] Structured observability baseline skeleton added (`telemetry::prometheus`, `telemetry::tracing`)
+- [ ] Production-grade metrics/trace pipeline + SLO gates
 - [ ] Third-party external security assessment report
 
 ## 6. Recommended Next Implementation Steps
