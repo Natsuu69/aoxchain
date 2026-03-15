@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod app;
+pub mod build_info;
 pub mod config;
 pub mod economy;
 pub mod error;

@@ -73,6 +73,12 @@ Detaylı crate dizini: **[`crates/README.md`](crates/README.md)**
 ## 5) Deterministik Operatör Akışı (`aoxcmd`)
 
 ```bash
+# 0) Binary provenance (version + git hash + optional embedded cert digest)
+cargo run -p aoxcmd -- version
+
+# Optional: embed a certificate fingerprint at build time
+AOXC_EMBED_CERT_PATH=AOXC_DATA/keys/validator-1/certificate.json cargo run -p aoxcmd -- version
+
 # 1) Vision summary
 cargo run -p aoxcmd -- vision
 

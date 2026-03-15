@@ -1,3 +1,4 @@
+use aoxcmd::build_info::BuildInfo;
 use aoxcmd::economy::ledger::EconomyState;
 use aoxcmd::keys::{KeyBootstrapRequest, KeyManager, KeyPaths};
 use aoxcmd::node::engine::produce_single_block;
@@ -31,6 +32,7 @@ fn run_cli() -> Result<(), String> {
     }
 
     match args[1].as_str() {
+        "version" | "--version" | "-V" => cmd_version(),
         "help" | "--help" | "-h" => {
             print_usage();
             Ok(())
@@ -50,6 +52,30 @@ fn run_cli() -> Result<(), String> {
         "economy-status" => cmd_economy_status(&args[2..]),
         other => Err(format!("unknown command: {other}")),
     }
+}
+
+fn cmd_version() -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let output = serde_json::json!({
+        "name": "aoxcmd",
+        "version": build.semver,
+        "git_commit": build.git_commit,
+        "git_dirty": build.git_dirty,
+        "source_date_epoch": build.source_date_epoch,
+        "embedded_cert": {
+            "path": build.cert_path,
+            "sha256": build.cert_sha256,
+            "error": build.cert_error,
+        }
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
 }
 
 fn cmd_vision() -> Result<(), String> {
@@ -466,6 +492,6 @@ fn arg_value(args: &[String], key: &str) -> Option<String> {
 
 fn print_usage() {
     println!(
-        "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  help\n"
+        "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  help\n"
     );
 }
