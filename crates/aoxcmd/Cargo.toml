@@ -16,3 +16,7 @@ aoxcdata = { path = "../aoxcdata" }
 serde_json = { workspace = true }
 hex = { workspace = true }
 
+
+[build-dependencies]
+sha2 = { workspace = true }
+hex = { workspace = true }
