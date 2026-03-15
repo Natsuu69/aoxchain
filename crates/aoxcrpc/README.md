@@ -20,6 +20,7 @@ This crate now includes a production-oriented secure API skeleton:
 - security middleware (`mTLS`, `rate limiting`, `ZKP validation`),
 - split service boundaries for query and transaction submission,
 - HTTP health + Prometheus metrics snapshot export,
+- HTTP health endpoint supports detailed production payloads (`chain_id`, `genesis_hash`, TLS/mTLS readiness, certificate SHA-256 fingerprint, readiness score, warnings, uptime).
 - websocket event framing for block confirmations.
 - rate limiter rejections include `retry_after_ms` metadata for deterministic client backoff UX.
 - canonical `RpcErrorResponse` model is available for machine-readable error payloads (`code`, `message`, `retry_after_ms`, `request_id`).
