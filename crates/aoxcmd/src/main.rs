@@ -14,6 +14,7 @@ use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
 use aoxcunity::messages::ConsensusMessage;
 use aoxcunity::vote::{Vote, VoteKind};
+use std::collections::BTreeMap;
 
 use std::env;
 use std::process;
@@ -75,6 +76,7 @@ fn run_cli() -> Result<(), String> {
         "runtime-status" => cmd_runtime_status(&args[2..]),
         "interop-readiness" => cmd_interop_readiness(),
         "interop-gate" => cmd_interop_gate(&args[2..]),
+        "production-audit" => cmd_production_audit(&args[2..]),
         other => Err(localized_unknown_command(lang, other)),
     }
 }
@@ -100,7 +102,6 @@ fn localized_unknown_command(lang: CliLanguage, command: &str) -> String {
 fn cmd_version() -> Result<(), String> {
     let build = BuildInfo::collect();
     let output = serde_json::json!({
-        "name": "aoxc",
         "name": "aoxcmd",
         "version": build.semver,
         "git_commit": build.git_commit,
@@ -672,6 +673,126 @@ fn cmd_interop_gate(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_production_audit(args: &[String]) -> Result<(), String> {
+    let genesis_path = arg_value(args, "--genesis")
+        .unwrap_or_else(|| "AOXC_DATA/identity/genesis.json".to_string());
+    let economy_state_path =
+        arg_value(args, "--state").unwrap_or_else(|| "AOXC_DATA/economy/state.json".to_string());
+
+    let ai_model_signed = arg_bool_value(args, "--ai-model-signed").unwrap_or(false);
+    let ai_prompt_guard = arg_bool_value(args, "--ai-prompt-guard").unwrap_or(false);
+    let ai_anomaly_detection = arg_bool_value(args, "--ai-anomaly-detection").unwrap_or(false);
+    let ai_human_override = arg_bool_value(args, "--ai-human-override").unwrap_or(false);
+
+    let build = BuildInfo::collect();
+
+    let genesis = GenesisLoader::load(&genesis_path).ok();
+    let genesis_hash = genesis.as_ref().map(|g| g.config.state_hash());
+    let genesis_chain_id = genesis.as_ref().map(|g| g.config.chain_id.clone());
+    let genesis_valid = genesis.is_some();
+
+    let economy = EconomyState::load_or_default(&economy_state_path)?;
+    let mut stake_by_validator: BTreeMap<String, u128> = BTreeMap::new();
+    for position in &economy.stakes {
+        let entry = stake_by_validator
+            .entry(position.validator.clone())
+            .or_insert(0);
+        *entry = entry.saturating_add(position.amount);
+    }
+
+    let node = state::setup().map_err(|error| error.to_string())?;
+
+    let ai_checks = [
+        ("model_signature_verification", ai_model_signed),
+        ("prompt_injection_guard", ai_prompt_guard),
+        ("anomaly_detection_for_ai_paths", ai_anomaly_detection),
+        ("human_override_for_high_risk_actions", ai_human_override),
+    ];
+
+    let mut recommendations = Vec::new();
+    if !genesis_valid {
+        recommendations.push(
+            "Provide a valid genesis file and verify canonical state_hash before mainnet rollout",
+        );
+    }
+    if build.cert_sha256 == "not-configured" {
+        recommendations.push("Embed node certificate fingerprint into build pipeline and enforce startup verification");
+    }
+    for (name, ok) in ai_checks {
+        if !ok {
+            recommendations.push(match name {
+                "model_signature_verification" => {
+                    "Enable cryptographic AI model artifact signature verification"
+                }
+                "prompt_injection_guard" => "Enable AI prompt injection and jail-break guardrails",
+                "anomaly_detection_for_ai_paths" => {
+                    "Enable anomaly detection for AI-assisted decision paths"
+                }
+                "human_override_for_high_risk_actions" => {
+                    "Require human override on high-risk AI decisions"
+                }
+                _ => "Enable missing AI security controls",
+            });
+        }
+    }
+
+    let ai_security_score = ai_control_score(&ai_checks);
+
+    let output = serde_json::json!({
+        "genesis": {
+            "path": genesis_path,
+            "valid": genesis_valid,
+            "chain_id": genesis_chain_id,
+            "state_hash": genesis_hash,
+        },
+        "certificates": {
+            "embedded_cert_path": build.cert_path,
+            "embedded_cert_sha256": build.cert_sha256,
+            "embedded_cert_error": build.cert_error,
+        },
+        "key_security": {
+            "mainnet_key_generation_requires_explicit_opt_in": true,
+            "env_override": "AOXC_ALLOW_MAINNET_KEYS",
+        },
+        "ai_security": {
+            "controls": ai_checks,
+            "score": ai_security_score,
+        },
+        "validator_network": {
+            "configured_validators": node.rotation.validators().len(),
+            "quorum": {
+                "numerator": node.consensus.quorum.numerator,
+                "denominator": node.consensus.quorum.denominator,
+            }
+        },
+        "treasury_and_staking": {
+            "state_path": economy_state_path,
+            "treasury_account": economy.treasury_account,
+            "treasury_balance": economy.treasury_balance(),
+            "total_staked": economy.total_staked(),
+            "stake_by_validator": stake_by_validator,
+            "positions": economy.stakes,
+        },
+        "recommendations": recommendations,
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output).map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    Ok(())
+}
+
+fn ai_control_score(controls: &[(&str, bool)]) -> u8 {
+    if controls.is_empty() {
+        return 0;
+    }
+
+    ((controls.iter().filter(|(_, ok)| *ok).count() as f64 / controls.len() as f64) * 100.0).round()
+        as u8
+}
+
 fn arg_value(args: &[String], key: &str) -> Option<String> {
     args.windows(2).find_map(|window| {
         if window[0] == key {
@@ -750,6 +871,18 @@ fn print_usage(lang: CliLanguage) {
 fn usage_text(lang: CliLanguage) -> &'static str {
     match lang {
         CliLanguage::Tr => {
+            "AOXC Komut Yüzeyi\n\nKomutlar:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  production-audit [--genesis <file>] [--state <file>] [--ai-model-signed <bool>] [--ai-prompt-guard <bool>] [--ai-anomaly-detection <bool>] [--ai-human-override <bool>]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (veya AOXC_LANG ortam değişkeni)\n"
+        }
+        CliLanguage::Es => {
+            "Superficie de Comandos AOXC\n\nComandos:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  production-audit [--genesis <file>] [--state <file>] [--ai-model-signed <bool>] [--ai-prompt-guard <bool>] [--ai-anomaly-detection <bool>] [--ai-human-override <bool>]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (o variable AOXC_LANG)\n"
+        }
+        CliLanguage::De => {
+            "AOXC Kommandooberfläche\n\nBefehle:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  production-audit [--genesis <file>] [--state <file>] [--ai-model-signed <bool>] [--ai-prompt-guard <bool>] [--ai-anomaly-detection <bool>] [--ai-human-override <bool>]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (oder AOXC_LANG Umgebungsvariable)\n"
+        }
+        CliLanguage::En => {
+            "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  production-audit [--genesis <file>] [--state <file>] [--ai-model-signed <bool>] [--ai-prompt-guard <bool>] [--ai-anomaly-detection <bool>] [--ai-human-override <bool>]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (or AOXC_LANG environment variable)\n"
+        }
+    }
             "AOXC Komut Yüzeyi\n\nKomutlar:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n\nGlobal:\n  --lang <en|tr|es|de> (veya AOXC_LANG ortam değişkeni)\n"
         }
         CliLanguage::Es => {
@@ -771,6 +904,9 @@ fn print_usage() {
 #[cfg(test)]
 mod tests {
     use super::{
+        CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
+        bootstrap_defaults, detect_language, localized_unknown_command, usage_text,
+    };
         CliLanguage, arg_bool_value, assert_mainnet_key_policy, bootstrap_defaults,
         detect_language, localized_unknown_command, usage_text,
     };
@@ -845,5 +981,18 @@ mod tests {
             localized_unknown_command(CliLanguage::De, "foo"),
             "unbekannter befehl: foo"
         );
+    }
+
+    #[test]
+    fn ai_control_score_is_stable() {
+        let controls = [
+            ("model_signature_verification", true),
+            ("prompt_injection_guard", true),
+            ("anomaly_detection_for_ai_paths", false),
+            ("human_override_for_high_risk_actions", false),
+        ];
+
+        assert_eq!(ai_control_score(&controls), 50);
+        assert_eq!(ai_control_score(&[]), 0);
     }
 }
