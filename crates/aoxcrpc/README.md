@@ -25,6 +25,8 @@ This crate now includes a production-oriented secure API skeleton:
 - canonical `RpcErrorResponse` model is available for machine-readable error payloads (`code`, `message`, `retry_after_ms`, `request_id`).
 - in-memory limiter supports stale key pruning and bounded key tracking (LRU-style eviction) to control long-run memory growth risk.
 - Prometheus snapshot includes `aox_rpc_rate_limited_total` and `aox_rpc_rate_limiter_active_keys` for abuse-visibility.
+- rate limiter rejections now include `retry_after_ms` metadata to support client-side backoff UX.
+- in-memory limiter supports stale key pruning to prevent unbounded map growth in long-running nodes.
 
 - API and behavior changes should be evaluated for backward impact.
 - Prefer explicit parameters over implicit defaults in critical paths.
