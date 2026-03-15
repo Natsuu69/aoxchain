@@ -2,6 +2,7 @@
 name = "aoxcmd"
 version.workspace = true
 edition.workspace = true
+default-run = "aoxc"
 
 [dependencies]
 serde = { workspace = true }
@@ -20,3 +21,7 @@ hex = { workspace = true }
 [build-dependencies]
 sha2 = { workspace = true }
 hex = { workspace = true }
+
+[[bin]]
+name = "aoxc"
+path = "src/main.rs"
