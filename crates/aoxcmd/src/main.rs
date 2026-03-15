@@ -4,6 +4,7 @@ use aoxcmd::node::state;
 
 use aoxcdata::{BlockEnvelope, HybridDataStore, IndexBackend};
 use aoxcnet::gossip::consensus_gossip::GossipEngine;
+use aoxcnet::gossip::peer::{NodeCertificate, Peer};
 use aoxcore::genesis::config::{GenesisConfig, TREASURY_ACCOUNT};
 use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
@@ -191,6 +192,22 @@ fn cmd_produce_once(args: &[String]) -> Result<(), String> {
 fn cmd_network_smoke() -> Result<(), String> {
     let mut gossip = GossipEngine::new();
 
+    let cert = NodeCertificate {
+        subject: "validator-1".to_string(),
+        issuer: "AOXC-ROOT-CA".to_string(),
+        valid_from_unix: 1,
+        valid_until_unix: u64::MAX,
+        serial: "validator-1-serial".to_string(),
+    };
+    let peer = Peer::new("validator-1", "127.0.0.1:26656", cert);
+
+    gossip
+        .register_peer(peer)
+        .map_err(|error| format!("NETWORK_PEER_REGISTER_ERROR: {error}"))?;
+    gossip
+        .establish_session("validator-1")
+        .map_err(|error| format!("NETWORK_SESSION_ERROR: {error}"))?;
+
     let vote = Vote {
         voter: [7u8; 32],
         block_hash: [9u8; 32],
@@ -199,14 +216,20 @@ fn cmd_network_smoke() -> Result<(), String> {
         kind: VoteKind::Prepare,
     };
 
-    gossip.broadcast(ConsensusMessage::Vote(vote));
+    gossip
+        .broadcast_from_peer("validator-1", ConsensusMessage::Vote(vote))
+        .map_err(|error| format!("NETWORK_BROADCAST_ERROR: {error}"))?;
+
     let inbound = gossip.receive();
+    let (peer_count, session_count) = gossip.stats();
 
     let output = serde_json::json!({
-        "transport": "stub",
+        "transport": "in-memory-secure-shell",
+        "security": "mutual-auth-session-gated",
+        "registered_peers": peer_count,
+        "active_sessions": session_count,
         "broadcast": "ok",
         "inbound_message": inbound,
-        "note": "None is expected until p2p transport integration is implemented"
     });
 
     println!(
