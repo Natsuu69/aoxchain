@@ -141,4 +141,35 @@ mod tests {
 
         assert!(limiter.check("peer-a").is_ok());
     }
+
+    #[test]
+    fn existing_key_is_not_evicted_when_capacity_is_reached() {
+        let mut limiter = RateLimiter::with_limits(2, Duration::from_secs(5), 1);
+
+        assert!(limiter.check("peer-a").is_ok());
+        assert!(limiter.check("peer-a").is_ok());
+        assert_eq!(limiter.active_key_count(), 1);
+
+        let err = limiter
+            .check("peer-a")
+            .expect_err("same key should be rate-limited instead of evicted");
+
+        assert!(matches!(err, RpcError::RateLimitExceeded { .. }));
+        assert_eq!(limiter.active_key_count(), 1);
+    }
+
+    #[test]
+    fn allows_requests_again_after_window_expires() {
+        let mut limiter = RateLimiter::new(1, Duration::from_millis(25));
+
+        assert!(limiter.check("peer-a").is_ok());
+        assert!(matches!(
+            limiter.check("peer-a"),
+            Err(RpcError::RateLimitExceeded { .. })
+        ));
+
+        std::thread::sleep(Duration::from_millis(30));
+
+        assert!(limiter.check("peer-a").is_ok());
+    }
 }

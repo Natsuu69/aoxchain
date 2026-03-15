@@ -85,4 +85,26 @@ mod tests {
             .as_deref()
             .is_some_and(|hint| hint.contains("retry_after_ms")));
     }
+
+    #[test]
+    fn internal_error_has_no_user_hint_or_retry_after() {
+        let response = RpcError::InternalError.to_response(Some("req-internal".to_string()));
+
+        assert_eq!(response.code, "INTERNAL_ERROR");
+        assert_eq!(response.retry_after_ms, None);
+        assert_eq!(response.user_hint, None);
+        assert_eq!(response.request_id.as_deref(), Some("req-internal"));
+    }
+
+    #[test]
+    fn zkp_error_contains_actionable_user_hint() {
+        let response = RpcError::ZkpValidationFailed("bad proof".to_string()).to_response(None);
+
+        assert_eq!(response.code, "ZKP_VALIDATION_FAILED");
+        assert!(response
+            .user_hint
+            .as_deref()
+            .is_some_and(|hint| hint.contains("valid ZKP proof")));
+        assert!(response.message.contains("bad proof"));
+    }
 }

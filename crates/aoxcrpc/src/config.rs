@@ -105,6 +105,69 @@ impl ConfigValidation {
             return 0;
         }
 
+        }
+
+        if self.max_requests_per_minute == 0 {
+            errors.push("max_requests_per_minute must be greater than zero".to_string());
+        }
+
+        if self.rate_limiter_window_secs == 0 {
+            errors.push("rate_limiter_window_secs must be greater than zero".to_string());
+        }
+
+        if self.rate_limiter_max_tracked_keys == 0 {
+            errors.push("rate_limiter_max_tracked_keys must be greater than zero".to_string());
+        }
+
+        if self.genesis_hash.is_none() {
+            warnings.push("genesis_hash is not configured".to_string());
+        } else if !self.has_valid_genesis_hash() {
+            errors.push("genesis_hash is malformed (expected 0x-prefixed 64-byte hex)".to_string());
+        }
+
+        if !Path::new(&self.tls_cert_path).exists() {
+            warnings.push("tls certificate file is missing".to_string());
+        }
+
+        if !Path::new(&self.tls_key_path).exists() {
+            warnings.push("tls private key file is missing".to_string());
+        }
+
+        if let Some(ca_path) = &self.mtls_ca_cert_path {
+            if !Path::new(ca_path).exists() {
+                warnings.push("mTLS CA certificate file is missing".to_string());
+            }
+        } else {
+            warnings.push("mTLS is disabled".to_string());
+        }
+
+        ConfigValidation { warnings, errors }
+    }
+
+    fn has_valid_genesis_hash(&self) -> bool {
+        let Some(hash) = &self.genesis_hash else {
+            return false;
+        };
+
+        hash.starts_with("0x")
+            && hash.len() == 66
+            && hash[2..].chars().all(|c| c.is_ascii_hexdigit())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfigValidation {
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+impl ConfigValidation {
+    #[must_use]
+    pub fn readiness_score(&self) -> u8 {
+        if !self.errors.is_empty() {
+            return 0;
+        }
+
         let warning_penalty = (self.warnings.len() as u8).saturating_mul(15);
         100_u8.saturating_sub(warning_penalty)
     }
@@ -139,5 +202,61 @@ mod tests {
 
         let validation = config.validate();
         assert!(validation.errors.is_empty());
+    }
+
+    #[test]
+    fn validate_flags_empty_chain_id_and_zero_limits() {
+        let mut config = RpcConfig::default();
+        config.chain_id = "   ".to_string();
+        config.max_requests_per_minute = 0;
+        config.rate_limiter_window_secs = 0;
+        config.rate_limiter_max_tracked_keys = 0;
+
+        let validation = config.validate();
+
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error.contains("chain_id must not be empty")));
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error.contains("max_requests_per_minute")));
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error.contains("rate_limiter_window_secs")));
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error.contains("rate_limiter_max_tracked_keys")));
+        assert_eq!(validation.readiness_score(), 0);
+    }
+
+    #[test]
+    fn readiness_score_penalizes_warnings_without_errors() {
+        let validation = ConfigValidation {
+            warnings: vec!["w1".to_string(), "w2".to_string()],
+            errors: vec![],
+        };
+
+        assert_eq!(validation.readiness_score(), 70);
+        assert!(!validation.is_ready());
+    }
+
+    #[test]
+    fn validate_can_be_fully_ready_with_existing_artifacts() {
+        let mut config = RpcConfig::default();
+        config.genesis_hash = Some(format!("0x{}", "ab".repeat(32)));
+        config.tls_cert_path = "Cargo.toml".to_string();
+        config.tls_key_path = "Cargo.toml".to_string();
+        config.mtls_ca_cert_path = Some("Cargo.toml".to_string());
+
+        let validation = config.validate();
+
+        assert!(validation.errors.is_empty());
+        assert!(validation.warnings.is_empty());
+        assert!(validation.is_ready());
+        assert_eq!(validation.readiness_score(), 100);
     }
 }

@@ -35,6 +35,7 @@ This crate now includes a production-oriented secure API skeleton:
 - Prefer explicit parameters over implicit defaults in critical paths.
 - Security-impacting changes in this crate should be accompanied by test/example updates.
 - `RpcConfig::validate()` provides startup-time sanity checks for chain identity, genesis hash format, and limiter thresholds.
+- Test coverage is expanded for validation + health + limiter + metrics paths to improve audit confidence.
 
 ## Local Validation
 

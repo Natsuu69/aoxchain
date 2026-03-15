@@ -43,6 +43,16 @@ mod tests {
         assert!(snapshot.contains("aox_rpc_rate_limited_total 3"));
         assert!(snapshot.contains("aox_rpc_rate_limiter_active_keys 42"));
         assert!(snapshot.contains("aox_rpc_health_readiness_score 85"));
+    }
+
+    #[test]
+    fn snapshot_contains_metric_headers() {
+        let snapshot = prometheus_metrics_snapshot(1, 1, 1, 1, 100);
+
+        assert!(snapshot.contains("# HELP aox_rpc_requests_total"));
+        assert!(snapshot.contains("# TYPE aox_rpc_requests_total counter"));
+        assert!(snapshot.contains("# HELP aox_rpc_health_readiness_score"));
+        assert!(snapshot.contains("# TYPE aox_rpc_health_readiness_score gauge"));
         let snapshot = prometheus_metrics_snapshot(120, 5, 3, 42);
 
         assert!(snapshot.contains("aox_rpc_rate_limited_total 3"));

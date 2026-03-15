@@ -232,6 +232,31 @@ mod tests {
         assert_eq!(health.readiness_score, 0);
         assert!(!health.errors.is_empty());
     }
+
+    #[test]
+    fn health_reports_error_and_guidance_for_malformed_genesis_hash() {
+        let mut config = RpcConfig::default();
+        config.genesis_hash = Some("0x1234".to_string());
+
+        let health = health_with_context(&config, 7);
+
+        assert_eq!(health.status, "error");
+        assert!(health
+            .errors
+            .iter()
+            .any(|error| error.contains("genesis_hash is malformed")));
+        assert!(health.recommendations.iter().any(|recommendation| {
+            recommendation.contains("genesis_hash") && recommendation.contains("node startup")
+        }));
+        assert_eq!(health.readiness_score, 0);
+    }
+
+    #[test]
+    fn health_omits_certificate_fingerprint_when_cert_file_missing() {
+        let config = RpcConfig::default();
+        let health = health_with_context(&config, 0);
+
+        assert!(health.tls_cert_sha256.is_none());
         assert_eq!(health.uptime_secs, 42);
         assert!(health.tls_cert_sha256.is_some());
     }
