@@ -14,6 +14,13 @@
 - `src/config.rs`
 
 ## Operational Notes
+This crate now includes a production-oriented secure API skeleton:
+
+- `proto/` definitions for binary gRPC contracts,
+- security middleware (`mTLS`, `rate limiting`, `ZKP validation`),
+- split service boundaries for query and transaction submission,
+- HTTP health + Prometheus metrics snapshot export,
+- websocket event framing for block confirmations.
 
 - API and behavior changes should be evaluated for backward impact.
 - Prefer explicit parameters over implicit defaults in critical paths.
