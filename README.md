@@ -138,8 +138,7 @@ cargo test -p aoxcunity -- --nocapture
 
 ### 1) Bootstrap key material
 
-```bash
-cargo run -p aoxcmd -- key-bootstrap \
+```bashcargo run -p aoxcmd -- key-bootstrap \
   --password "change-me" \
   --base-dir AOXC_DATA/keys \
   --name relay-1 \
