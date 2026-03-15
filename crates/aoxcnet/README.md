@@ -1,28 +1,31 @@
-# aoxcnet
+# AOXCNET
 
-## Purpose
+AOXCNET is the networking surface of AOXChain. It provides the peer identity,
+secure session, and gossip routing abstractions used by node orchestration.
 
-Network and gossip layer abstractions for peer discovery, synchronization, and consensus message transport.
+## Security-oriented design goals
 
-## Production Intent
+1. **Mutual-auth by default** (`SecurityMode::MutualAuth`).
+2. **Certificate validity enforcement** during peer admission.
+3. **Session-ticket gating** before secure message broadcast.
+4. **Audit-strict mode** (`SecurityMode::AuditStrict`) for production policy gates.
 
-This crate is part of the AOXChain relay-oriented mainnet roadmap. Its interfaces are expected to evolve toward:
+## Core modules
 
-- deterministic behavior in consensus-critical paths,
-- explicit and typed error surfaces,
-- testable integration boundaries with other workspace crates,
-- audit-friendly documentation and change control.
+- `config`: network + security profile settings.
+- `gossip::peer`: peer identity and certificate fingerprinting.
+- `p2p`: secure admission/session model and transport shell.
+- `gossip::consensus_gossip`: consensus message propagation API for node layer.
 
-## Local Development
+## CLI compatibility
 
-From repository root:
+`aoxcmd network-smoke` remains backward compatible and can run without a live
+transport backend. Secure p2p session flow is available for deterministic
+validation by registering peers + establishing sessions in process.
 
-```bash
-cargo check -p aoxcnet
-```
+## Audit usage checklist
 
-## Integration Notes
-
-- Keep API changes synchronized with dependent crates in the same pull request.
-- For consensus/network/identity touching changes, include tests or deterministic command paths.
-- Avoid introducing implicit defaults in critical runtime logic; prefer explicit parameters.
+- Enforce `SecurityMode::AuditStrict` in production configs.
+- Reject expired or not-yet-valid certificates.
+- Verify session count and peer inventory from telemetry.
+- Add integration tests for replay and partition scenarios before mainnet.
