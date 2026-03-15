@@ -54,6 +54,7 @@ fn run_cli() -> Result<(), String> {
         "economy-status" => cmd_economy_status(&args[2..]),
         "runtime-status" => cmd_runtime_status(&args[2..]),
         "interop-readiness" => cmd_interop_readiness(),
+        "interop-gate" => cmd_interop_gate(&args[2..]),
         other => Err(format!("unknown command: {other}")),
     }
 }
@@ -126,6 +127,7 @@ fn cmd_compat_matrix() -> Result<(), String> {
 
 fn cmd_key_bootstrap(args: &[String]) -> Result<(), String> {
     let defaults = bootstrap_defaults(args)?;
+    assert_mainnet_key_policy(args, defaults.profile)?;
 
     let base_dir = arg_value(args, "--base-dir").unwrap_or(defaults.base_dir);
     let name = arg_value(args, "--name").unwrap_or(defaults.name);
@@ -586,6 +588,52 @@ fn cmd_interop_readiness() -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_interop_gate(args: &[String]) -> Result<(), String> {
+    let audit_complete = arg_bool_value(args, "--audit-complete").unwrap_or(false);
+    let fuzz_complete = arg_bool_value(args, "--fuzz-complete").unwrap_or(false);
+    let replay_complete = arg_bool_value(args, "--replay-complete").unwrap_or(false);
+    let finality_matrix_complete =
+        arg_bool_value(args, "--finality-matrix-complete").unwrap_or(false);
+    let slo_complete = arg_bool_value(args, "--slo-complete").unwrap_or(false);
+
+    let checks = [
+        ("external_security_audit", audit_complete),
+        ("bridge_fuzz_property_testing", fuzz_complete),
+        ("deterministic_replay_suite", replay_complete),
+        ("finality_assumption_matrix", finality_matrix_complete),
+        ("observability_slo_alerting", slo_complete),
+    ];
+
+    let passed = checks.iter().filter(|(_, ok)| *ok).count();
+    let total = checks.len();
+    let readiness_percent = ((passed as f64 / total as f64) * 100.0 * 100.0).round() / 100.0;
+    let missing: Vec<&str> = checks
+        .iter()
+        .filter_map(|(name, ok)| if *ok { None } else { Some(*name) })
+        .collect();
+
+    let enforce = arg_flag(args, "--enforce");
+
+    let output = serde_json::json!({
+        "pass": missing.is_empty(),
+        "readiness_percent": readiness_percent,
+        "passed_checks": passed,
+        "total_checks": total,
+        "missing_controls": missing,
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output).map_err(|e| format!("JSON_SERIALIZE_ERROR: {e}"))?
+    );
+
+    if enforce && !output["pass"].as_bool().unwrap_or(false) {
+        return Err("interop gate failed: missing required controls".to_string());
+    }
+
+    Ok(())
+}
+
 fn arg_value(args: &[String], key: &str) -> Option<String> {
     args.windows(2).find_map(|window| {
         if window[0] == key {
@@ -629,6 +677,37 @@ fn bootstrap_defaults(args: &[String]) -> Result<BootstrapDefaults, String> {
     }
 }
 
+fn arg_bool_value(args: &[String], key: &str) -> Option<bool> {
+    arg_value(args, key).map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
+}
+
+fn arg_flag(args: &[String], key: &str) -> bool {
+    args.iter().any(|arg| arg == key)
+}
+
+fn assert_mainnet_key_policy(args: &[String], profile: &str) -> Result<(), String> {
+    if profile != "mainnet" {
+        return Ok(());
+    }
+
+    let allow_flag = arg_flag(args, "--allow-mainnet");
+    let allow_env = env::var("AOXC_ALLOW_MAINNET_KEYS")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false);
+
+    if allow_flag || allow_env {
+        return Ok(());
+    }
+
+    Err(
+        "mainnet key bootstrap blocked: pass --allow-mainnet or set AOXC_ALLOW_MAINNET_KEYS=true"
+            .to_string(),
+    )
+}
+
+fn print_usage() {
+    println!(
+        "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]\n  help\n"
 fn print_usage() {
     println!(
         "AOXC Command Surface\n\nCommands:\n  vision\n  compat-matrix\n  version\n  key-bootstrap --password <secret> [--profile mainnet|testnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]\n  genesis-init [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]\n  node-bootstrap\n  produce-once [--tx <payload>]\n  network-smoke\n  storage-smoke [--base-dir <dir>] [--index sqlite|redb]\n  economy-init [--state <file>] [--treasury-supply <u128>]\n  treasury-transfer --to <account> --amount <u128> [--state <file>]\n  stake-delegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  stake-undelegate --staker <account> --validator <id> --amount <u128> [--state <file>]\n  economy-status [--state <file>]\n  runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]\n  interop-readiness\n  help\n"
@@ -639,6 +718,7 @@ fn print_usage() {
 
 #[cfg(test)]
 mod tests {
+    use super::{arg_bool_value, assert_mainnet_key_policy, bootstrap_defaults};
     use super::bootstrap_defaults;
 
     #[test]
@@ -656,5 +736,29 @@ mod tests {
         assert_eq!(defaults.profile, "testnet");
         assert!(defaults.chain.starts_with("TEST-"));
         assert!(defaults.issuer.starts_with("TEST-"));
+    }
+
+    #[test]
+    fn bool_argument_parser_works() {
+        let args = vec!["--audit-complete".to_string(), "true".to_string()];
+        assert_eq!(arg_bool_value(&args, "--audit-complete"), Some(true));
+    }
+
+    #[test]
+    fn mainnet_profile_requires_explicit_override() {
+        let allow_env = std::env::var("AOXC_ALLOW_MAINNET_KEYS")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or(false);
+
+        if !allow_env {
+            let args = vec![];
+            assert!(assert_mainnet_key_policy(&args, "mainnet").is_err());
+        }
+
+        let args = vec!["--allow-mainnet".to_string()];
+        assert!(assert_mainnet_key_policy(&args, "mainnet").is_ok());
+
+        let args = vec![];
+        assert!(assert_mainnet_key_policy(&args, "testnet").is_ok());
     }
 }

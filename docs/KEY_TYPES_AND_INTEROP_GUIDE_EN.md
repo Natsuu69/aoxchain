@@ -33,6 +33,8 @@ On Unix-like systems, AOXChain persists these artifacts with restrictive file mo
 
 This keeps test identities visibly separated from mainnet-like identifiers and reduces operator mix-up risk.
 
+Mainnet profile requires explicit opt-in (`--allow-mainnet` or `AOXC_ALLOW_MAINNET_KEYS=true`) to prevent accidental production-key issuance on developer hosts.
+
 ## 2) Secure Password Examples
 
 Accepted example pattern:
@@ -64,6 +66,23 @@ To improve chain compatibility quality beyond baseline implementation:
 
 5. **Audit-first release gates**
    - Require external audits for key lifecycle, signer domain separation, and bridge code.
+
+## 3.1) Machine-Readable Interop Gate
+
+`aoxcmd interop-gate` provides CI-friendly release readiness checks with pass/fail and missing controls:
+
+- `--audit-complete <bool>`
+- `--fuzz-complete <bool>`
+- `--replay-complete <bool>`
+- `--finality-matrix-complete <bool>`
+- `--slo-complete <bool>`
+- `--enforce` (returns non-zero on failure)
+
+Example:
+
+```bash
+aoxc interop-gate --audit-complete true --fuzz-complete true --replay-complete true --finality-matrix-complete true --slo-complete true --enforce
+```
 
 ## 4) Recommended Production Path
 
