@@ -1,0 +1,22 @@
+{
+  "chain_id": "aox-mainnet-1",
+  "genesis_time": 1735689600,
+  "params": {
+    "block_time_secs": 6,
+    "max_gas_per_block": 30000000,
+    "epoch_length": 43200
+  },
+  "validators": [
+    {
+      "name": "validator-1",
+      "address": "aoxval1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp6m9k",
+      "power": 100
+    }
+  ],
+  "alloc": [
+    {
+      "address": "aox1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk99j9m",
+      "balance": "1000000000000000000"
+    }
+  ]
+}

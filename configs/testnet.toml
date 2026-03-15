@@ -1,0 +1,8 @@
+chain_id = "aox-testnet-1"
+listen_addr = "0.0.0.0:36656"
+rpc_addr = "0.0.0.0:18545"
+peers = [
+  "127.0.0.1:36657",
+  "127.0.0.1:36658",
+]
+security_mode = "mutual_auth"
