@@ -4,27 +4,41 @@
   </a>
 </div>
 
+# AOXChain
 
+AOXChain is a **multi-crate Rust blockchain workspace** focused on deterministic behavior, auditability, and operator safety.
 
+This repository contains:
+- protocol primitives,
+- consensus and networking layers,
+- API ingress,
+- execution compatibility surfaces,
+- operational CLI tooling.
 
+---
 
+## 1) Architecture at a glance
 
-## 
+| Domain | Crate(s) | Responsibility |
+|---|---|---|
+| Core protocol | `aoxcore` | Identity, genesis, transactions, mempool, shared primitives |
+| Consensus | `aoxcunity` | Quorum, rounds, vote handling, finalization-related state |
+| Networking | `aoxcnet` | Discovery/gossip/sync and transport utilities |
+| API ingress | `aoxcrpc` | HTTP/gRPC/WebSocket service entry surfaces |
+| Execution compatibility | `aoxcvm` | Lane-based compatibility (EVM/WASM/Move/UTXO-facing adapters) |
+| Operator tooling | `aoxcmd`, `aoxckit` | Node bootstrap, runtime commands, key and ops workflows |
 
-AOXChain is a **multi-crate Rust blockchain workspace** focused on deterministic behavior, auditability, and operational security. The repository consolidates core protocol logic, consensus, networking, API ingress, execution compatibility, and operator tooling in a single workspace.
+Detailed crate map: [`crates/README.md`](crates/README.md)
 
-## 1. Project Scope
+---
 
-The AOXChain architecture is organized across these primary domains:
+## 2) Quick start (local)
 
-- **Core protocol (`aoxcore`)**: identity, genesis, transactions, mempool, and state primitives.
-- **Consensus (`aoxcunity`)**: quorum, voting, fork-choice, proposer rotation, and sealing.
-- **Networking (`aoxcnet`)**: discovery, gossip, sync, and transport abstractions.
-- **API ingress (`aoxcrpc`)**: HTTP + gRPC + WebSocket interfaces and security middleware.
-- **Execution compatibility (`aoxcvm`)**: multi-VM/lane routing and host interfaces.
-- **Operational tooling (`aoxcmd`, `aoxckit`)**: node lifecycle, economics commands, and keyforge workflows.
+### Prerequisites
+- Rust toolchain (stable)
+- `cargo`
 
-## 2. Quick Start
+### Workspace validation
 
 ```bash
 cargo fmt --all
@@ -32,11 +46,12 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-Local CLI validation:
+### Basic CLI sanity checks
 
 ```bash
 cargo run -p aoxcmd -- version
 cargo run -p aoxcmd -- vision
+cargo run -p aoxcmd -- port-map
 cargo run -p aoxcmd -- runtime-status --trace standard --tps 12.4 --peers 7 --error-rate 0.001
 cargo run -p aoxcmd -- node-run --rounds 5 --sleep-ms 1000 --tx-prefix AOXC_RUN
 cargo run -p aoxcmd -- real-network --rounds 5 --timeout-ms 3000 --pause-ms 250
@@ -82,32 +97,27 @@ Example strong password for bootstrap:
 AOXc#Mainnet2026!
 ```
 
-Detailed guide: [`docs/KEY_TYPES_AND_INTEROP_GUIDE_EN.md`](docs/KEY_TYPES_AND_INTEROP_GUIDE_EN.md).
+---
 
-## 3. Production-Oriented Commands (v0.1.0-alpha Baseline)
+## 3) Most useful operator commands
 
-For repeatable pre-production validation, use the quality-gate commands:
+> All commands below support `--home <dir>` globally (or `AOXC_HOME`) for data isolation.
+
+### 3.1 Bootstrap and first block
 
 ```bash
-make quality-quick    # fmt + check + test
-make quality          # fmt + check + clippy + test
-make quality-release  # release-oriented validation
+cargo run -p aoxcmd -- key-bootstrap --profile testnet --password "TEST#Secure2026!"
+cargo run -p aoxcmd -- genesis-init
+cargo run -p aoxcmd -- node-bootstrap
+cargo run -p aoxcmd -- produce-once --tx "hello-aox"
 ```
 
-Additional hardening helpers:
+### 3.2 Runtime snapshot and release gate
 
 ```bash
-make clippy
-make audit-install    # install cargo-audit
-make audit            # dependency vulnerability scan
-make audit            # requires cargo-audit installation
-make package-bin
-make supervise-local  # local self-healing supervisor for the node
-```
-
-The `scripts/quality_gate.sh` entrypoint is CI-friendly and supports three modes:
-
-```bash
+cargo run -p aoxcmd -- runtime-status --trace standard --tps 12.4 --peers 7 --error-rate 0.001
+cargo run -p aoxcmd -- interop-readiness
+cargo run -p aoxcmd -- interop-gate --audit-complete true --fuzz-complete true --replay-complete true --finality-matrix-complete true --slo-complete true --enforce
 ./scripts/quality_gate.sh quick
 ./scripts/quality_gate.sh full
 ./scripts/quality_gate.sh release
@@ -164,96 +174,100 @@ make quality-quick
 make package-bin
 ```
 
-### 8.2 Testnet First (Recommended)
-
-1. Generate testnet key material:
+### 3.3 Continuous local node flow (`node-run`)
 
 ```bash
-./bin/aoxc key-bootstrap --profile testnet --password 'TEST#Secure2026!'
+cargo run -p aoxcmd -- node-run --rounds 20 --sleep-ms 1000 --tx-prefix AOXC_RUN
 ```
 
-2. Bootstrap node + one block:
+What it does:
+- produces multiple blocks in sequence,
+- sleeps between rounds,
+- returns machine-readable JSON summary (`rounds_produced`, `rounds_failed`, `final_height`).
+
+### 3.4 Repeated network probe (`real-network`)
 
 ```bash
-./bin/aoxc node-bootstrap
-./bin/aoxc produce-once --tx 'testnet-smoke-1'
+cargo run -p aoxcmd -- real-network --rounds 10 --timeout-ms 3000 --pause-ms 200 --bind-host 127.0.0.1 --port 0
 ```
 
-3. Verify runtime telemetry snapshot:
+What it does:
+- runs repeated live TCP probe rounds,
+- reports pass/fail counts,
+- reports RTT min/max/avg metrics.
 
-```bash
-./bin/aoxc runtime-status --trace standard --tps 25.0 --peers 8 --error-rate 0.001
+> Important: this is a **probe utility**, not proof of full internet-grade production P2P readiness.
+
+---
+
+## 4) Command reference (aoxcmd)
+
+```text
+vision
+compat-matrix
+port-map
+version
+key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
+genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]
+node-bootstrap
+produce-once [--tx <payload>]
+node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
+network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+real-network [--rounds <u64>] [--timeout-ms <u64>] [--pause-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
+economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
+treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
+stake-delegate --staker <account> --validator <id> --amount <u128> [--home <dir>] [--state <file>]
+stake-undelegate --staker <account> --validator <id> --amount <u128> [--home <dir>] [--state <file>]
+economy-status [--home <dir>] [--state <file>]
+runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]
+interop-readiness
+interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]
+production-audit [--home <dir>] [--genesis <file>] [--state <file>] [--ai-model-signed <bool>] [--ai-prompt-guard <bool>] [--ai-anomaly-detection <bool>] [--ai-human-override <bool>]
+help
 ```
 
-4. Run release gate checks:
+Language support:
+- `--lang <en|tr|es|de>`
+- `AOXC_LANG=<code>`
+
+---
+
+## 5) Security notes
+
+- `key-bootstrap` enforces strong password baseline (length + complexity).
+- `mainnet` key bootstrap is intentionally guarded and requires explicit opt-in:
+  - `--allow-mainnet`, or
+  - `AOXC_ALLOW_MAINNET_KEYS=true`
+- Key/cert/passport outputs are written with restrictive file permissions on Unix-like systems.
+
+---
+
+## 6) Real-network readiness guidance
+
+For Turkish go/no-go criteria that separate demo-level validation from operational real-chain readiness, see:
+
+- [`docs/GERCEK_AG_HAZIRLIK_KRITERLERI_TR.md`](docs/GERCEK_AG_HAZIRLIK_KRITERLERI_TR.md)
+
+Additional references:
+- [`docs/RELAY_CHAIN_MAINNET_BLUEPRINT.md`](docs/RELAY_CHAIN_MAINNET_BLUEPRINT.md)
+- [`docs/AUDIT_READINESS_AND_OPERATIONS.md`](docs/AUDIT_READINESS_AND_OPERATIONS.md)
+
+---
+
+## 7) Quality gates and CI helpers
 
 ```bash
-./bin/aoxc interop-gate --audit-complete true --fuzz-complete true --replay-complete true --finality-matrix-complete true --slo-complete true --enforce
-```
-
-### 8.3 Mainnet-Oriented Bootstrap (Explicit Opt-In)
-
-Mainnet key generation is intentionally blocked unless you explicitly allow it:
-
-```bash
-./bin/aoxc key-bootstrap --profile mainnet --allow-mainnet --password 'AOXc#Mainnet2026!'
-```
-
-Alternative env-based override:
-
-```bash
-AOXC_ALLOW_MAINNET_KEYS=true ./bin/aoxc key-bootstrap --profile mainnet --password 'AOXc#Mainnet2026!'
-```
-
-### 8.4 Continuous Block Production + Detailed Logs
-
-Use the new script for uninterrupted block attempts and timestamped logs:
-
-```bash
-MAX_ROUNDS=0 SLEEP_SECS=2 LOG_FILE=./logs/continuous-producer.log ./scripts/continuous_producer.sh
-```
-
-- `MAX_ROUNDS=0` means infinite loop.
-- Each round writes:
-  - input payload (`tx=`),
-  - `produce-once` output,
-  - round-level status (`OK` / `ERROR code=...`).
-
-Example finite test run:
-
-```bash
-MAX_ROUNDS=5 TX_PREFIX=testnet-batch ./scripts/continuous_producer.sh
-```
-
-### 8.5 Self-Healing Node Supervision
-
-```bash
-MAX_RESTARTS=50 RESTART_DELAY_SECS=2 ./scripts/node_supervisor.sh
-```
-
-### 8.6 End-to-End Operator Command Set
-
-```bash
-# compile + package
 make quality-quick
-make package-bin
-
-# testnet bootstrap
-./bin/aoxc key-bootstrap --profile testnet --password 'TEST#Secure2026!'
-./bin/aoxc genesis-init --path ./configs/genesis.testnet.local.json --chain-num 2026 --block-time 2 --treasury 1000000000
-./bin/aoxc node-bootstrap
-
-# produce and observe
-./bin/aoxc produce-once --tx 'initial-liquidity-seed'
-./bin/aoxc runtime-status --trace verbose --tps 18.5 --peers 12 --error-rate 0.0005
-
-# continuous producer loop with logs
-MAX_ROUNDS=0 SLEEP_SECS=2 LOG_FILE=./logs/continuous-producer.log ./scripts/continuous_producer.sh
+make quality
+make quality-release
+./scripts/quality_gate.sh quick
+./scripts/quality_gate.sh full
+./scripts/quality_gate.sh release
 ```
 
-### 8.7 Log Review Commands
+---
 
-```bash
-tail -n 100 ./logs/continuous-producer.log
-rg "ERROR|OK|round=" ./logs/continuous-producer.log
-```
+## 8) License
+
+MIT (`LICENSE`)
