@@ -27,6 +27,7 @@ pub fn run_live_tcp_smoke_on(
 
     let listener =
         TcpListener::bind(bind_addr).map_err(|error| format!("tcp bind failed: {error}"))?;
+        TcpListener::bind("127.0.0.1:0").map_err(|error| format!("tcp bind failed: {error}"))?;
     let listener_addr = listener
         .local_addr()
         .map_err(|error| format!("failed to read listener address: {error}"))?;
@@ -117,6 +118,7 @@ pub fn run_live_tcp_smoke_on(
 #[cfg(test)]
 mod tests {
     use super::{run_live_tcp_smoke, run_live_tcp_smoke_on};
+    use super::run_live_tcp_smoke;
     use std::time::Duration;
 
     #[test]

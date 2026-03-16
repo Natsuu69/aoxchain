@@ -10,6 +10,7 @@ use aoxcmd::telemetry::tracing::TraceProfile;
 use aoxcdata::{BlockEnvelope, HybridDataStore, IndexBackend};
 use aoxcnet::ports::{LIVE_SMOKE_TEST_PORT, PORT_BINDINGS, RPC_HTTP_PORT};
 use aoxcnet::transport::live_tcp::run_live_tcp_smoke_on;
+use aoxcnet::transport::live_tcp::run_live_tcp_smoke;
 use aoxcore::genesis::config::{GenesisConfig, TREASURY_ACCOUNT};
 use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
@@ -48,6 +49,7 @@ fn main() {
 fn run_cli() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     let lang = detect_language(&args[1..]);
+    apply_home_override(&args[1..]);
 
     if args.len() < 2 {
         print_usage(lang);
@@ -79,6 +81,16 @@ fn run_cli() -> Result<(), String> {
         "interop-gate" => cmd_interop_gate(&args[2..]),
         "production-audit" => cmd_production_audit(&args[2..]),
         other => Err(localized_unknown_command(lang, other)),
+    }
+}
+
+fn apply_home_override(args: &[String]) {
+    if let Some(home) = arg_value(args, "--home") {
+        // SAFETY: this process performs environment mutation during single-threaded
+        // CLI bootstrap before any background threads are started.
+        unsafe {
+            env::set_var("AOXC_HOME", home);
+        }
     }
 }
 
@@ -348,6 +360,12 @@ fn cmd_network_smoke(args: &[String]) -> Result<(), String> {
     let bind_addr = format!("127.0.0.1:{bind_port}");
 
     let report = run_live_tcp_smoke_on(&bind_addr, &payload, Duration::from_millis(timeout_ms))
+
+    let payload = arg_value(args, "--payload")
+        .unwrap_or_else(|| "AOXC_LIVE_TCP_PING".to_string())
+        .into_bytes();
+
+    let report = run_live_tcp_smoke(&payload, Duration::from_millis(timeout_ms))
         .map_err(|error| format!("NETWORK_LIVE_SMOKE_ERROR: {error}"))?;
 
     let output = serde_json::json!({
@@ -908,6 +926,8 @@ Komutlar:
   node-bootstrap
   produce-once [--tx <payload>]
   network-smoke [--timeout-ms <u64>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
@@ -938,6 +958,8 @@ Comandos:
   node-bootstrap
   produce-once [--tx <payload>]
   network-smoke [--timeout-ms <u64>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
@@ -968,6 +990,8 @@ Befehle:
   node-bootstrap
   produce-once [--tx <payload>]
   network-smoke [--timeout-ms <u64>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
@@ -998,6 +1022,8 @@ Commands:
   node-bootstrap
   produce-once [--tx <payload>]
   network-smoke [--timeout-ms <u64>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
