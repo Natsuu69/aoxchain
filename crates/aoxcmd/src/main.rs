@@ -1058,6 +1058,8 @@ Komutlar:
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
   network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
   real-network [--rounds <u64>] [--timeout-ms <u64>] [--pause-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
@@ -1090,6 +1092,8 @@ Comandos:
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
   network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
   real-network [--rounds <u64>] [--timeout-ms <u64>] [--pause-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
@@ -1122,6 +1126,8 @@ Befehle:
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
   network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
   real-network [--rounds <u64>] [--timeout-ms <u64>] [--pause-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
@@ -1154,6 +1160,8 @@ Commands:
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
   network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
   real-network [--rounds <u64>] [--timeout-ms <u64>] [--pause-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+  network-smoke [--timeout-ms <u64>] [--payload <text>]
+  network-smoke
   storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
   economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
   treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
