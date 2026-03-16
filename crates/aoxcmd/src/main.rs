@@ -10,7 +10,7 @@ use aoxcmd::telemetry::tracing::TraceProfile;
 use aoxcdata::{BlockEnvelope, HybridDataStore, IndexBackend};
 use aoxcnet::ports::{LIVE_SMOKE_TEST_PORT, PORT_BINDINGS, RPC_HTTP_PORT};
 use aoxcnet::transport::live_tcp::run_live_tcp_smoke_on;
-use aoxcore::genesis::config::{GenesisConfig, TREASURY_ACCOUNT};
+use aoxcore::genesis::config::{GenesisConfig, SettlementLink, TREASURY_ACCOUNT};
 use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
 use std::collections::BTreeMap;
@@ -265,12 +265,36 @@ fn cmd_genesis_init(args: &[String]) -> Result<(), String> {
         .unwrap_or_else(|| "1000000000".to_string())
         .parse()
         .map_err(|_| "--treasury must be a valid u128".to_string())?;
+    let native_symbol = arg_value(args, "--native-symbol").unwrap_or_else(|| "AOXC".to_string());
+    let native_decimals: u8 = arg_value(args, "--native-decimals")
+        .unwrap_or_else(|| "18".to_string())
+        .parse()
+        .map_err(|_| "--native-decimals must be a valid u8".to_string())?;
+    let settlement_network =
+        arg_value(args, "--settlement-network").unwrap_or_else(|| "xlayer".to_string());
+    let settlement_token_address = arg_value(args, "--xlayer-token")
+        .unwrap_or_else(|| "0xeb9580c3946bb47d73aae1d4f7a94148b554b2f4".to_string());
+    let settlement_main_contract = arg_value(args, "--xlayer-main-contract")
+        .unwrap_or_else(|| "0x97bdd1fd1caf756e00efd42eba9406821465b365".to_string());
+    let settlement_multisig_contract = arg_value(args, "--xlayer-multisig")
+        .unwrap_or_else(|| "0x20c0dd8b6559912acfac2ce061b8d5b19db8ca84".to_string());
+    let equivalence_mode =
+        arg_value(args, "--equivalence-mode").unwrap_or_else(|| "1:1".to_string());
 
     let mut config = GenesisConfig::new();
     config.chain_num = chain_num;
     config.chain_id = GenesisConfig::generate_chain_id(chain_num);
     config.block_time = block_time;
     config.treasury = treasury;
+    config.settlement_link = SettlementLink {
+        native_symbol,
+        native_decimals,
+        settlement_network,
+        settlement_token_address,
+        settlement_main_contract,
+        settlement_multisig_contract,
+        equivalence_mode,
+    };
     config.add_account(TREASURY_ACCOUNT.to_string(), treasury);
 
     config.validate()?;
@@ -285,7 +309,16 @@ fn cmd_genesis_init(args: &[String]) -> Result<(), String> {
         "block_time": loaded.config.block_time,
         "treasury": loaded.config.treasury,
         "total_supply": loaded.config.total_supply(),
-        "state_hash": loaded.config.state_hash()
+        "state_hash": loaded.config.state_hash(),
+        "settlement_link": {
+            "native_symbol": loaded.config.settlement_link.native_symbol,
+            "native_decimals": loaded.config.settlement_link.native_decimals,
+            "settlement_network": loaded.config.settlement_link.settlement_network,
+            "settlement_token_address": loaded.config.settlement_link.settlement_token_address,
+            "settlement_main_contract": loaded.config.settlement_link.settlement_main_contract,
+            "settlement_multisig_contract": loaded.config.settlement_link.settlement_multisig_contract,
+            "equivalence_mode": loaded.config.settlement_link.equivalence_mode
+        }
     });
 
     println!(
@@ -1052,7 +1085,7 @@ Komutlar:
   port-map
   version
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
-  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]
+  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
   produce-once [--tx <payload>]
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
@@ -1086,7 +1119,7 @@ Comandos:
   port-map
   version
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
-  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]
+  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
   produce-once [--tx <payload>]
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
@@ -1120,7 +1153,7 @@ Befehle:
   port-map
   version
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
-  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]
+  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
   produce-once [--tx <payload>]
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
@@ -1154,7 +1187,7 @@ Commands:
   port-map
   version
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
-  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]
+  genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
   produce-once [--tx <payload>]
   node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
