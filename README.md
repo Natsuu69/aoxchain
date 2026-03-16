@@ -1,30 +1,91 @@
 <div align="center">
   <a href="https://github.com/aoxc/aoxcore">
-    <img src="logos/aoxc_transparent.png" alt="AOXCORE Logo" width="180" />
+    <img src="logos/aoxc_transparent.png" alt="AOXChain Logo" width="180" />
   </a>
+
+# AOXChain
+### Deterministic, Security-Oriented, Multi-Crate Blockchain Workspace
+
 </div>
 
+AOXChain is a Rust workspace for building and operating a deterministic coordination chain with strong operator controls, auditable runtime behavior, and production-readiness gates.
 
+This README is intentionally written as an **operator-first, chronological guide** so teams can move from local bootstrap to multi-role validation with minimal ambiguity.
 
+---
 
+## Table of Contents
 
+1. [What AOXChain Contains](#1-what-aoxchain-contains)
+2. [Node Roles (Validator / DAO / AI Security)](#2-node-roles-validator--dao--ai-security)
+3. [Prerequisites](#3-prerequisites)
+4. [Build, Quality Gates, and Verification](#4-build-quality-gates-and-verification)
+5. [Chronological Setup: Genesis → Node → Wallet-like Identity → Stake](#5-chronological-setup-genesis--node--wallet-like-identity--stake)
+6. [Networking and Node Connectivity (Ports, IDs, Peer Prep)](#6-networking-and-node-connectivity-ports-ids-peer-prep)
+7. [Staking and Economy Operations](#7-staking-and-economy-operations)
+8. [Production-Oriented Commands](#8-production-oriented-commands)
+9. [Make Targets for Daily and Release Operations](#9-make-targets-for-daily-and-release-operations)
+10. [Security Baselines and Mainnet Safeguards](#10-security-baselines-and-mainnet-safeguards)
+11. [Real-Network Readiness (Go/No-Go)](#11-real-network-readiness-gono-go)
+12. [Complete `aoxcmd` Command Surface](#12-complete-aoxcmd-command-surface)
 
-## 
+---
 
-AOXChain is a **multi-crate Rust blockchain workspace** focused on deterministic behavior, auditability, and operational security. The repository consolidates core protocol logic, consensus, networking, API ingress, execution compatibility, and operator tooling in a single workspace.
+## 1) What AOXChain Contains
 
-## 1. Project Scope
+AOXChain is organized as a modular Rust workspace:
 
-The AOXChain architecture is organized across these primary domains:
+| Layer | Crate(s) | Responsibility |
+|---|---|---|
+| Protocol Core | `aoxcore` | Identity, genesis, transactions, mempool, protocol primitives |
+| Consensus | `aoxcunity` | Quorum, rounds, voting, proposer/finality-related state |
+| Networking | `aoxcnet` | Discovery, gossip, sync, transport probes |
+| API Ingress | `aoxcrpc` | HTTP / gRPC / WebSocket surfaces |
+| Execution Compatibility | `aoxcvm` | Multi-lane compatibility (EVM/WASM/Move/UTXO-facing paths) |
+| Operator Tooling | `aoxcmd`, `aoxckit` | Node lifecycle, bootstrap, economics, readiness and audit commands |
 
-- **Core protocol (`aoxcore`)**: identity, genesis, transactions, mempool, and state primitives.
-- **Consensus (`aoxcunity`)**: quorum, voting, fork-choice, proposer rotation, and sealing.
-- **Networking (`aoxcnet`)**: discovery, gossip, sync, and transport abstractions.
-- **API ingress (`aoxcrpc`)**: HTTP + gRPC + WebSocket interfaces and security middleware.
-- **Execution compatibility (`aoxcvm`)**: multi-VM/lane routing and host interfaces.
-- **Operational tooling (`aoxcmd`, `aoxckit`)**: node lifecycle, economics commands, and keyforge workflows.
+For crate-level map details, see [`crates/README.md`](crates/README.md).
 
-## 2. Quick Start
+---
+
+## 2) Node Roles (Validator / DAO / AI Security)
+
+AOXChain operations can be modeled with three role types:
+
+### A) Validator Node
+- Produces and validates blocks.
+- Maintains chain liveness and consensus participation.
+- Typically runs long-lived node loops and uptime-focused supervision.
+
+### B) DAO Governance Node
+- Focuses on governance process integrity.
+- Participates in voting, policy checks, operational review, and governance audits.
+- Tracks release gates, audit results, and decision logs.
+
+### C) AI Security Node
+- Provides model-governed security contributions.
+- Should run only under explicit policy controls (signed model, prompt guard, anomaly checks, human override).
+- Can be integrated into reward logic when its security contribution is measurable and policy-compliant.
+
+> Note: role economics/governance reward policy should be enforced by governance specs and release policies, not by README text alone.
+
+---
+
+## 3) Prerequisites
+
+- Rust stable toolchain
+- `cargo`
+- Linux/macOS shell environment recommended for ops scripts
+
+Optional but useful:
+- `make`
+- `cargo-audit`
+
+---
+
+## 4) Build, Quality Gates, and Verification
+
+Baseline workspace checks:
 
 ```bash
 cargo fmt --all
@@ -32,224 +93,276 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-Local CLI validation:
+Fast operator sanity checks:
 
 ```bash
 cargo run -p aoxcmd -- version
 cargo run -p aoxcmd -- vision
+cargo run -p aoxcmd -- port-map
+```
+
+---
+
+## 5) Chronological Setup: Genesis → Node → Wallet-like Identity → Stake
+
+This is the recommended order for first-time environment setup.
+
+### Step 1 — Isolate runtime data directory
+
+```bash
+export AOXC_HOME=$PWD/.aoxc-local
+```
+
+### Step 2 — Create node identity / wallet-like key material
+
+```bash
+cargo run -p aoxcmd -- key-bootstrap \
+  --profile testnet \
+  --name validator-01 \
+  --password "TEST#Secure2026!"
+```
+
+### Step 3 — Initialize genesis
+
+```bash
+cargo run -p aoxcmd -- genesis-init \
+  --chain-num 1001 \
+  --block-time 6 \
+  --treasury 1000000000000
+```
+
+### Step 4 — Bootstrap node runtime
+
+```bash
+cargo run -p aoxcmd -- node-bootstrap
+```
+
+### Step 5 — Produce one block (deterministic smoke)
+
+```bash
+cargo run -p aoxcmd -- produce-once --tx "boot-sequence-1"
+```
+
+### Step 6 — Run continuous local production loop
+
+```bash
+cargo run -p aoxcmd -- node-run --rounds 20 --sleep-ms 1000 --tx-prefix AOXC_RUN
+```
+
+### Step 7 — Run repeated live TCP probe
+
+```bash
+cargo run -p aoxcmd -- real-network \
+  --rounds 10 \
+  --timeout-ms 3000 \
+  --pause-ms 250 \
+  --bind-host 127.0.0.1 \
+  --port 0
+```
+
+### Step 8 — Runtime and release readiness checks
+
+```bash
 cargo run -p aoxcmd -- runtime-status --trace standard --tps 12.4 --peers 7 --error-rate 0.001
 cargo run -p aoxcmd -- interop-readiness
-cargo run -p aoxcmd -- key-bootstrap --profile testnet --password "TEST#Secure2026!"
-cargo run -p aoxcmd -- interop-gate --audit-complete true --fuzz-complete true --replay-complete true --finality-matrix-complete true --slo-complete true --enforce
+cargo run -p aoxcmd -- interop-gate \
+  --audit-complete true \
+  --fuzz-complete true \
+  --replay-complete true \
+  --finality-matrix-complete true \
+  --slo-complete true \
+  --enforce
 ```
 
+---
 
-## 3.1 CLI Security + Telemetry Baseline
+## 6) Networking and Node Connectivity (Ports, IDs, Peer Prep)
 
-`aoxcmd key-bootstrap` now enforces a strong password baseline (minimum 12 chars with upper/lower/digit/symbol classes) before key material is persisted. On Unix-like systems, key bundle, certificate, and passport artifacts are persisted with restrictive `0600` file permissions.
+Operational checklist for node connectivity:
 
-`key-bootstrap` also supports `--profile mainnet|testnet`. The `testnet` profile uses `TEST-` prefixed chain/issuer defaults (for example `TEST-XXX-XX-LOCAL`) so test keys are clearly separated from mainnet-oriented defaults.
+1. Generate identity material per node (`key-bootstrap`).
+2. Confirm ports and surfaces with `port-map`.
+3. Capture node identity metadata from generated artifacts (`*.cert.json`, `*.passport.json`, keys).
+4. Build a peer list and verify reachable addresses across distinct hosts.
+5. Validate smoke path (`network-smoke`) and multi-round transport behavior (`real-network`).
 
-For safety, `mainnet` profile key generation now requires explicit opt-in (`--allow-mainnet` or `AOXC_ALLOW_MAINNET_KEYS=true`) to reduce accidental production key creation during local/test runs.
-
-`aoxcmd runtime-status` provides a production-friendly runtime snapshot for tracing profile + Prometheus-formatted telemetry payloads and can be wired into operator dashboards or external scrape bridges.
-
-### Interop Release Gate
-
-Use `interop-gate` for machine-readable release checks. It outputs pass/fail, readiness percentage, and missing controls, and can fail CI with `--enforce`.
-
-Example:
+Inspect configured ports:
 
 ```bash
-cargo run -p aoxcmd -- interop-gate --audit-complete true --fuzz-complete true --replay-complete true --finality-matrix-complete true --slo-complete true --enforce
+cargo run -p aoxcmd -- port-map
 ```
 
-`aoxcmd runtime-status` provides a production-friendly runtime snapshot for tracing profile + Prometheus-formatted telemetry payloads and can be wired into operator dashboards or external scrape bridges.
+Run explicit TCP smoke probe:
 
-## 3.2 Key Types (Production-Oriented Summary)
+```bash
+cargo run -p aoxcmd -- network-smoke --bind-host 127.0.0.1 --port 9600 --payload "HELLO"
+```
 
-AOXChain currently uses a **post-quantum identity path** plus encrypted keyfile persistence:
+> Production note: loopback tests are not sufficient. Validate multi-host, firewall-aware, latency/packet-disturbance scenarios before claiming real-network readiness.
 
-- **Dilithium3** for identity signatures (`aoxcore::identity::pq_keys`)
-- **Argon2id + AES-256-GCM** for secret-key encryption at rest (`aoxcore::identity::keyfile`)
-- **Key bootstrap artifacts**: `<name>.key`, `<name>.cert.json`, `<name>.passport.json`
+---
 
-Example strong password for bootstrap:
+## 7) Staking and Economy Operations
+
+Initialize economy state:
+
+```bash
+cargo run -p aoxcmd -- economy-init --treasury-supply 1000000000000
+```
+
+Transfer from treasury to an operator account:
+
+```bash
+cargo run -p aoxcmd -- treasury-transfer --to wallet-user-01 --amount 100000
+```
+
+Delegate stake to validator:
+
+```bash
+cargo run -p aoxcmd -- stake-delegate --staker wallet-user-01 --validator validator-01 --amount 25000
+```
+
+Undelegate part of stake:
+
+```bash
+cargo run -p aoxcmd -- stake-undelegate --staker wallet-user-01 --validator validator-01 --amount 5000
+```
+
+View economy status:
+
+```bash
+cargo run -p aoxcmd -- economy-status
+```
+
+---
+
+## 8) Production-Oriented Commands
+
+Runtime telemetry snapshot:
+
+```bash
+cargo run -p aoxcmd -- runtime-status --trace standard --tps 25.0 --peers 8 --error-rate 0.001
+```
+
+Production audit (AI controls, genesis, staking/treasury status):
+
+```bash
+cargo run -p aoxcmd -- production-audit \
+  --ai-model-signed true \
+  --ai-prompt-guard true \
+  --ai-anomaly-detection true \
+  --ai-human-override true
+```
+
+Interop release gate:
+
+```bash
+cargo run -p aoxcmd -- interop-gate \
+  --audit-complete true \
+  --fuzz-complete true \
+  --replay-complete true \
+  --finality-matrix-complete true \
+  --slo-complete true \
+  --enforce
+```
+
+---
+
+## 9) Make Targets for Daily and Release Operations
+
+Daily checks:
+
+```bash
+make quality-quick
+make quality
+```
+
+Release-focused checks and packaging:
+
+```bash
+make quality-release
+make package-bin
+```
+
+Dependency security scanning:
+
+```bash
+make audit-install
+make audit
+```
+
+Local supervision helper:
+
+```bash
+make supervise-local
+```
+
+---
+
+## 10) Security Baselines and Mainnet Safeguards
+
+- `key-bootstrap` enforces strong password requirements.
+- Mainnet key generation is intentionally protected and requires explicit opt-in:
+  - `--allow-mainnet`, or
+  - `AOXC_ALLOW_MAINNET_KEYS=true`
+- Artifact permissions are hardened on Unix-like systems for key/cert/passport outputs.
+- Use enforced gates (`interop-gate --enforce`) in CI/CD, not optional reporting only.
+
+---
+
+## 11) Real-Network Readiness (Go/No-Go)
+
+Do **not** claim full real-network readiness unless these are covered:
+
+- Multi-node (3+) across distinct hosts
+- Partition / restart / rejoin / recovery scenarios
+- TLS/mTLS and RPC access policy hardening
+- Snapshot / backup / restore runbooks tested
+- Signed release artifacts + provenance verification
+- Mandatory CI/CD pass/fail quality and security gates
+
+Turkish go/no-go checklist:
+- [`docs/GERCEK_AG_HAZIRLIK_KRITERLERI_TR.md`](docs/GERCEK_AG_HAZIRLIK_KRITERLERI_TR.md)
+
+Additional references:
+- [`docs/RELAY_CHAIN_MAINNET_BLUEPRINT.md`](docs/RELAY_CHAIN_MAINNET_BLUEPRINT.md)
+- [`docs/AUDIT_READINESS_AND_OPERATIONS.md`](docs/AUDIT_READINESS_AND_OPERATIONS.md)
+
+---
+
+## 12) Complete `aoxcmd` Command Surface
 
 ```text
-AOXc#Mainnet2026!
+vision
+compat-matrix
+port-map
+version
+key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
+genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>]
+node-bootstrap
+produce-once [--tx <payload>]
+node-run [--home <dir>] [--rounds <u64>] [--sleep-ms <u64>] [--tx-prefix <text>]
+network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+real-network [--rounds <u64>] [--timeout-ms <u64>] [--pause-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]
+storage-smoke [--home <dir>] [--base-dir <dir>] [--index sqlite|redb]
+economy-init [--home <dir>] [--state <file>] [--treasury-supply <u128>]
+treasury-transfer --to <account> --amount <u128> [--home <dir>] [--state <file>]
+stake-delegate --staker <account> --validator <id> --amount <u128> [--home <dir>] [--state <file>]
+stake-undelegate --staker <account> --validator <id> --amount <u128> [--home <dir>] [--state <file>]
+economy-status [--home <dir>] [--state <file>]
+runtime-status [--trace minimal|standard|verbose] [--tps <f64>] [--peers <usize>] [--error-rate <f64>]
+interop-readiness
+interop-gate [--audit-complete <bool>] [--fuzz-complete <bool>] [--replay-complete <bool>] [--finality-matrix-complete <bool>] [--slo-complete <bool>] [--enforce]
+production-audit [--home <dir>] [--genesis <file>] [--state <file>] [--ai-model-signed <bool>] [--ai-prompt-guard <bool>] [--ai-anomaly-detection <bool>] [--ai-human-override <bool>]
+help
 ```
 
-Detailed guide: [`docs/KEY_TYPES_AND_INTEROP_GUIDE_EN.md`](docs/KEY_TYPES_AND_INTEROP_GUIDE_EN.md).
+Language support:
+- `--lang <en|tr|es|de>`
+- `AOXC_LANG=<code>`
 
-## 3. Production-Oriented Commands (v0.1.0-alpha Baseline)
+---
 
-For repeatable pre-production validation, use the quality-gate commands:
+## License
 
-```bash
-make quality-quick    # fmt + check + test
-make quality          # fmt + check + clippy + test
-make quality-release  # release-oriented validation
-```
-
-Additional hardening helpers:
-
-```bash
-make clippy
-make audit-install    # install cargo-audit
-make audit            # dependency vulnerability scan
-make audit            # requires cargo-audit installation
-make package-bin
-make supervise-local  # local self-healing supervisor for the node
-```
-
-The `scripts/quality_gate.sh` entrypoint is CI-friendly and supports three modes:
-
-```bash
-./scripts/quality_gate.sh quick
-./scripts/quality_gate.sh full
-./scripts/quality_gate.sh release
-```
-
-
-GitHub Actions CI runs:
-- quick gate on all PRs
-- full gate on pushes to protected branches
-- weekly scheduled `cargo audit` security scan (`Security Audit` workflow)
-
-## 4. Production Readiness Note
-
-This repository is under active development. Before production deployment, at minimum complete:
-
-1. Independent security audits (consensus, identity, networking, RPC)
-2. Threat modeling and adversarial scenario validation
-3. Performance and resilience testing (stress/chaos/partition)
-4. Operational runbooks, SLO/SLA targets, and observability policies
-5. Release, rollback, and artifact provenance controls
-
-## 5. Repository Map
-
-Detailed crate index: [`crates/README.md`](crates/README.md)
-
-| Path | Responsibility |
-|---|---|
-| `crates/aoxcore` | Core protocol domain primitives |
-| `crates/aoxcunity` | Consensus engine |
-| `crates/aoxcnet` | P2P networking layer |
-| `crates/aoxcrpc` | API ingress layer |
-| `crates/aoxcvm` | Execution compatibility layer |
-| `crates/aoxcmd` | Node and operations command surface |
-| `crates/aoxckit` | Keyforge/certificate tooling |
-
-## 6. Documentation Policy
-
-README files must remain synchronized with code changes. Any critical behavior update should include a README revision in the same PR.
-
-## 7. License
-
-MIT (`LICENSE`).
-
-## 8. Mainnet/Testnet Operational Playbook (Detailed)
-
-> ⚠️ Important: This repository provides a strong engineering baseline, but **no blockchain deployment can be guaranteed “100% error-free”**. Use staged rollout, audits, and monitored canary deployments.
-
-### 8.1 Build + Binary Packaging
-
-```bash
-make quality-quick
-make package-bin
-```
-
-### 8.2 Testnet First (Recommended)
-
-1. Generate testnet key material:
-
-```bash
-./bin/aoxc key-bootstrap --profile testnet --password 'TEST#Secure2026!'
-```
-
-2. Bootstrap node + one block:
-
-```bash
-./bin/aoxc node-bootstrap
-./bin/aoxc produce-once --tx 'testnet-smoke-1'
-```
-
-3. Verify runtime telemetry snapshot:
-
-```bash
-./bin/aoxc runtime-status --trace standard --tps 25.0 --peers 8 --error-rate 0.001
-```
-
-4. Run release gate checks:
-
-```bash
-./bin/aoxc interop-gate --audit-complete true --fuzz-complete true --replay-complete true --finality-matrix-complete true --slo-complete true --enforce
-```
-
-### 8.3 Mainnet-Oriented Bootstrap (Explicit Opt-In)
-
-Mainnet key generation is intentionally blocked unless you explicitly allow it:
-
-```bash
-./bin/aoxc key-bootstrap --profile mainnet --allow-mainnet --password 'AOXc#Mainnet2026!'
-```
-
-Alternative env-based override:
-
-```bash
-AOXC_ALLOW_MAINNET_KEYS=true ./bin/aoxc key-bootstrap --profile mainnet --password 'AOXc#Mainnet2026!'
-```
-
-### 8.4 Continuous Block Production + Detailed Logs
-
-Use the new script for uninterrupted block attempts and timestamped logs:
-
-```bash
-MAX_ROUNDS=0 SLEEP_SECS=2 LOG_FILE=./logs/continuous-producer.log ./scripts/continuous_producer.sh
-```
-
-- `MAX_ROUNDS=0` means infinite loop.
-- Each round writes:
-  - input payload (`tx=`),
-  - `produce-once` output,
-  - round-level status (`OK` / `ERROR code=...`).
-
-Example finite test run:
-
-```bash
-MAX_ROUNDS=5 TX_PREFIX=testnet-batch ./scripts/continuous_producer.sh
-```
-
-### 8.5 Self-Healing Node Supervision
-
-```bash
-MAX_RESTARTS=50 RESTART_DELAY_SECS=2 ./scripts/node_supervisor.sh
-```
-
-### 8.6 End-to-End Operator Command Set
-
-```bash
-# compile + package
-make quality-quick
-make package-bin
-
-# testnet bootstrap
-./bin/aoxc key-bootstrap --profile testnet --password 'TEST#Secure2026!'
-./bin/aoxc genesis-init --path ./configs/genesis.testnet.local.json --chain-num 2026 --block-time 2 --treasury 1000000000
-./bin/aoxc node-bootstrap
-
-# produce and observe
-./bin/aoxc produce-once --tx 'initial-liquidity-seed'
-./bin/aoxc runtime-status --trace verbose --tps 18.5 --peers 12 --error-rate 0.0005
-
-# continuous producer loop with logs
-MAX_ROUNDS=0 SLEEP_SECS=2 LOG_FILE=./logs/continuous-producer.log ./scripts/continuous_producer.sh
-```
-
-### 8.7 Log Review Commands
-
-```bash
-tail -n 100 ./logs/continuous-producer.log
-rg "ERROR|OK|round=" ./logs/continuous-producer.log
-```
+MIT (`LICENSE`)
