@@ -33,7 +33,51 @@ AOXChain already has deployed components on **X Layer**.
 
 These references show that AOXChain is positioned with an active, real-network footprint rather than a purely theoretical architecture.
 
+![Status](https://img.shields.io/badge/status-live-success)
+![Network](https://img.shields.io/badge/network-X%20Layer-blue)
+![Model](https://img.shields.io/badge/architecture-relay--chain-purple)
+![Language](https://img.shields.io/badge/stack-Rust-orange)
+
+</div>
+
+AOXChain is a Rust-based blockchain workspace designed as a **relay-first coordination chain**.
+Its main objective is **interoperability, routing, and cross-system coordination**—not competing as a "faster L1" or "just another alternative network."
+
+This README explains the project in a clear, chronological way: what is already live, why the chain exists, and how to run it locally.
+
 ---
+
+## 1) Current Live Presence (X Layer References)
+
+AOXChain already has deployed components on **X Layer**.
+
+- **Main contract address:**
+  https://www.oklink.com/tr/x-layer/address/0x97bdd1fd1caf756e00efd42eba9406821465b365/contract
+- **Proxy token address:**
+  https://www.oklink.com/tr/x-layer/token/0xeb9580c3946bb47d73aae1d4f7a94148b554b2f4?tab=contract
+- **Multisig contract address:**
+  https://www.oklink.com/tr/x-layer/address/0x20c0dd8b6559912acfac2ce061b8d5b19db8ca84/contract
+
+These references show that AOXChain is positioned with an active, real-network footprint rather than a purely theoretical architecture.
+
+---
+
+## 2) Chain Purpose: Why AOXChain Exists
+
+AOXChain is built with a **relay-chain mindset**:
+
+- Coordinate value and messages across systems.
+- Provide deterministic and auditable routing logic.
+- Support governance and controlled operations through clear operator tooling.
+- Prioritize reliability and interoperability over raw speed marketing.
+
+### What AOXChain is **not**
+
+- Not a chain focused only on maximum TPS claims.
+- Not trying to be "just a different network" without a coordination role.
+- Not positioned as a replacement for every execution environment.
+
+### What AOXChain is
 
 ## 2) Chain Purpose: Why AOXChain Exists
 
@@ -74,6 +118,9 @@ For crate-level details, see [`crates/README.md`](crates/README.md).
 ---
 
 ## 4) Chronological Local Setup (Simple Path)
+
+### Step 1 — Prerequisites
+
 
 ### Step 1 — Prerequisites
 
@@ -167,6 +214,29 @@ Related docs are available under [`docs/`](docs/).
 
 ---
 
+
+## 7) Enforcing AOXC Native Coin ↔ X Layer Token Equivalence in Code
+
+To make the X Layer connection stronger at protocol level, `genesis-init` now writes a canonical settlement binding into `genesis.json`:
+
+- `native_symbol` (default: `AOXC`)
+- `native_decimals` (default: `18`)
+- `settlement_network` (default: `xlayer`)
+- `settlement_token_address`
+- `settlement_main_contract`
+- `settlement_multisig_contract`
+- `equivalence_mode` (default: `1:1`)
+
+Example:
+
+```bash
+cargo run -p aoxcmd -- genesis-init   --chain-num 1001   --block-time 6   --treasury 1000000000000   --native-symbol AOXC   --native-decimals 18   --settlement-network xlayer   --xlayer-token 0xeb9580c3946bb47d73aae1d4f7a94148b554b2f4   --xlayer-main-contract 0x97bdd1fd1caf756e00efd42eba9406821465b365   --xlayer-multisig 0x20c0dd8b6559912acfac2ce061b8d5b19db8ca84   --equivalence-mode 1:1
+```
+
+This settlement link is part of genesis validation and state hashing, so deployments cannot silently drift from the AOXC/X Layer contract mapping.
+
+---
+## 8) Final Positioning
 ## 7) Final Positioning
 
 AOXChain should be understood as:

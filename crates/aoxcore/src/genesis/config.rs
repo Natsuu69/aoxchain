@@ -32,6 +32,9 @@ const MAX_ADDRESS_LEN: usize = 128;
 /// Maximum accepted validator identifier length in bytes.
 const MAX_VALIDATOR_ID_LEN: usize = 32;
 
+/// Maximum accepted metadata string length.
+const MAX_METADATA_LEN: usize = 256;
+
 /// Runtime-only genesis seal retained for compatibility with the current
 /// bootstrap flow.
 ///
@@ -63,6 +66,39 @@ impl AOXCANDSeal {
 pub struct GenesisAccount {
     pub address: String,
     pub balance: u128,
+}
+
+/// Cross-layer metadata used to bind AOXC native economics to X Layer assets.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct SettlementLink {
+    /// Native chain currency symbol.
+    pub native_symbol: String,
+    /// Native currency decimals.
+    pub native_decimals: u8,
+    /// Settlement network identifier.
+    pub settlement_network: String,
+    /// Bridged token address on settlement network (EVM hex string).
+    pub settlement_token_address: String,
+    /// Main coordination contract address on settlement network.
+    pub settlement_main_contract: String,
+    /// Multisig governance contract address on settlement network.
+    pub settlement_multisig_contract: String,
+    /// Canonical relationship mode (for now `1:1`).
+    pub equivalence_mode: String,
+}
+
+impl Default for SettlementLink {
+    fn default() -> Self {
+        Self {
+            native_symbol: "AOXC".to_string(),
+            native_decimals: 18,
+            settlement_network: "xlayer".to_string(),
+            settlement_token_address: "0xeb9580c3946bb47d73aae1d4f7a94148b554b2f4".to_string(),
+            settlement_main_contract: "0x97bdd1fd1caf756e00efd42eba9406821465b365".to_string(),
+            settlement_multisig_contract: "0x20c0dd8b6559912acfac2ce061b8d5b19db8ca84".to_string(),
+            equivalence_mode: "1:1".to_string(),
+        }
+    }
 }
 
 /// Genesis configuration used to bootstrap the chain.
@@ -98,6 +134,10 @@ pub struct GenesisConfig {
     /// rest of the system already depends on it.
     pub treasury: u128,
 
+    /// Cross-layer settlement binding metadata.
+    #[serde(default)]
+    pub settlement_link: SettlementLink,
+
     /// Runtime seal, excluded from persistent serialization.
     #[serde(skip, default = "default_genesis_seal")]
     pub genesis_seal: AOXCANDSeal,
@@ -122,6 +162,7 @@ impl GenesisConfig {
             validators: Vec::with_capacity(16),
             accounts: Vec::with_capacity(64),
             treasury: 0,
+            settlement_link: SettlementLink::default(),
             genesis_seal: AOXCANDSeal::new(),
         }
     }
@@ -253,6 +294,8 @@ impl GenesisConfig {
             }
         }
 
+        validate_settlement_link(&self.settlement_link)?;
+
         Ok(())
     }
 
@@ -271,6 +314,7 @@ impl GenesisConfig {
             block_time: u64,
             accounts: Vec<&'a GenesisAccount>,
             treasury: u128,
+            settlement_link: &'a SettlementLink,
         }
 
         let mut accounts: Vec<&GenesisAccount> = self.accounts.iter().collect();
@@ -282,6 +326,7 @@ impl GenesisConfig {
             block_time: self.block_time,
             accounts,
             treasury: self.treasury,
+            settlement_link: &self.settlement_link,
         };
 
         let encoded =
@@ -306,6 +351,13 @@ impl GenesisConfig {
         hasher.update(self.chain_num.to_be_bytes());
         hasher.update(self.block_time.to_be_bytes());
         hasher.update(self.treasury.to_be_bytes());
+        hasher.update(self.settlement_link.native_symbol.as_bytes());
+        hasher.update([self.settlement_link.native_decimals]);
+        hasher.update(self.settlement_link.settlement_network.as_bytes());
+        hasher.update(self.settlement_link.settlement_token_address.as_bytes());
+        hasher.update(self.settlement_link.settlement_main_contract.as_bytes());
+        hasher.update(self.settlement_link.settlement_multisig_contract.as_bytes());
+        hasher.update(self.settlement_link.equivalence_mode.as_bytes());
 
         let mut accounts: Vec<&GenesisAccount> = self.accounts.iter().collect();
         accounts.sort_by(|left, right| left.address.cmp(&right.address));
@@ -419,4 +471,80 @@ fn is_valid_address(value: &str) -> bool {
     trimmed
         .chars()
         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.')
+}
+
+fn validate_settlement_link(link: &SettlementLink) -> Result<(), String> {
+    let symbol = link.native_symbol.trim();
+    if symbol.is_empty() || symbol.len() > 16 || !symbol.chars().all(|ch| ch.is_ascii_uppercase()) {
+        return Err(
+            "GENESIS: settlement native_symbol must be uppercase ASCII and <=16 chars".to_string(),
+        );
+    }
+
+    if link.native_decimals > 30 {
+        return Err("GENESIS: settlement native_decimals must be <= 30".to_string());
+    }
+
+    if link.settlement_network.trim().is_empty() || link.settlement_network.len() > 32 {
+        return Err("GENESIS: settlement network id is invalid".to_string());
+    }
+
+    if link.equivalence_mode.trim().is_empty() || link.equivalence_mode.len() > 16 {
+        return Err("GENESIS: settlement equivalence_mode is invalid".to_string());
+    }
+
+    for (label, value) in [
+        ("settlement_token_address", &link.settlement_token_address),
+        ("settlement_main_contract", &link.settlement_main_contract),
+        (
+            "settlement_multisig_contract",
+            &link.settlement_multisig_contract,
+        ),
+    ] {
+        if value.len() > MAX_METADATA_LEN || !is_valid_evm_address(value) {
+            return Err(format!("GENESIS: invalid {}", label));
+        }
+    }
+
+    Ok(())
+}
+
+fn is_valid_evm_address(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.len() != 42 || !trimmed.starts_with("0x") {
+        return false;
+    }
+
+    trimmed[2..].chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GenesisConfig, SettlementLink};
+
+    #[test]
+    fn settlement_defaults_are_valid() {
+        let cfg = GenesisConfig::new();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn settlement_invalid_token_address_is_rejected() {
+        let mut cfg = GenesisConfig::new();
+        cfg.settlement_link.settlement_token_address = "bad-address".to_string();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn settlement_link_changes_hash() {
+        let mut first = GenesisConfig::new();
+        let second = GenesisConfig::new();
+
+        first.settlement_link = SettlementLink {
+            settlement_network: "xlayer-alt".to_string(),
+            ..first.settlement_link.clone()
+        };
+
+        assert_ne!(first.state_hash(), second.state_hash());
+    }
 }
