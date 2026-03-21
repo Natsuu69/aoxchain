@@ -13,6 +13,9 @@ use aoxcnet::transport::live_tcp::run_live_tcp_smoke_on;
 use aoxcore::genesis::config::{GenesisConfig, SettlementLink, TREASURY_ACCOUNT};
 use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
+use aoxcore::protocol::{
+    canonical_chain_families, canonical_message_envelope_fields, canonical_modules,
+};
 use std::collections::BTreeMap;
 
 mod cli_support;
@@ -138,6 +141,20 @@ fn cmd_vision() -> Result<(), String> {
 }
 
 fn cmd_module_architecture() -> Result<(), String> {
+    let relay_module_names: Vec<&str> = canonical_modules()
+        .iter()
+        .map(|module| module.as_str())
+        .collect();
+    let supported_chain_families: Vec<&str> = canonical_chain_families()
+        .iter()
+        .map(|family| family.as_str())
+        .collect();
+    let envelope_fields = canonical_message_envelope_fields();
+
+    let output = serde_json::json!({
+        "relay_core": {
+            "principle": "keep the relay chain thin, neutral, and durable",
+            "canonical_modules": relay_module_names,
     let output = serde_json::json!({
         "relay_core": {
             "principle": "keep the relay chain thin, neutral, and durable",
@@ -181,6 +198,7 @@ fn cmd_module_architecture() -> Result<(), String> {
             }
         ],
         "message_envelope": {
+            "fields": envelope_fields
             "fields": [
                 "sourceModule",
                 "destinationModule",
@@ -212,6 +230,7 @@ fn cmd_module_architecture() -> Result<(), String> {
         },
         "compatibility_strategy": {
             "model": "functional modules + adapter families",
+            "supported_chain_families": supported_chain_families,
             "do_not_do": "do not turn the relay chain into a heavy application chain",
             "why": "chain families evolve, but identity, asset, execution, interop, and proof responsibilities remain stable"
         }
