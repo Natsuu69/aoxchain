@@ -1,21 +1,8 @@
 use crate::{
-<<<<<<< HEAD
-<<<<<<< HEAD
-    error::AppError,
-    node::{
-        lifecycle::{load_state, persist_state},
-        state::NodeState,
-=======
-=======
->>>>>>> 8d5616a (commit(aoxc-dev): 🔄 sync [878677b] at 2026-03-22 01:31:22 ✅ verified 🛡️)
     error::{AppError, ErrorCode},
     node::{
         lifecycle::{load_state, persist_state},
         state::{ConsensusSnapshot, NodeState},
-<<<<<<< HEAD
->>>>>>> 0cfb403 (Refactor aoxcmd node engine for consensus API)
-=======
->>>>>>> 8d5616a (commit(aoxc-dev): 🔄 sync [878677b] at 2026-03-22 01:31:22 ✅ verified 🛡️)
     },
 };
 use aoxcunity::{
