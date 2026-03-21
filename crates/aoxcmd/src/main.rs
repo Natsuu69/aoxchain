@@ -52,6 +52,7 @@ fn run_cli() -> Result<(), String> {
             Ok(())
         }
         "vision" => cmd_vision(),
+        "module-architecture" => cmd_module_architecture(),
         "compat-matrix" => cmd_compat_matrix(),
         "port-map" => cmd_port_map(),
         "key-bootstrap" => cmd_key_bootstrap(&args[2..]),
@@ -114,9 +115,106 @@ fn cmd_vision() -> Result<(), String> {
         "chain_positioning": "interop relay-oriented coordination chain",
         "primary_goal": "cross-chain compatibility and deterministic coordination over raw throughput",
         "execution_strategy": "multi-lane model compatible with heterogeneous external networks",
+        "recommended_topology": "thin relay core + five attached functional modules",
+        "functional_modules": [
+            "identity",
+            "asset_treasury",
+            "smart_execution",
+            "interop_bridge",
+            "data_proof"
+        ],
         "identity_model": "post-quantum capable key/certificate/passport pipeline",
         "consensus_model": "quorum-based proposer/vote/finalization with explicit rotation",
         "status": "pre-mainnet; deterministic local smoke path available"
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
+}
+
+fn cmd_module_architecture() -> Result<(), String> {
+    let output = serde_json::json!({
+        "relay_core": {
+            "principle": "keep the relay chain thin, neutral, and durable",
+            "responsibilities": [
+                "finality_ordering",
+                "shared_security",
+                "validator_set_management",
+                "cross_module_message_routing",
+                "universal_identity_root",
+                "state_commitment_and_proof_root_anchoring",
+                "governance_and_upgrades",
+                "fee_and_staking_settlement_root"
+            ]
+        },
+        "attached_modules": [
+            {
+                "name": "AOXC-MODULE-IDENTITY",
+                "purpose": "universal identity, address binding, recovery, delegates, chain account mapping",
+                "must_depend_on_relay": ["identity_root", "governance", "state_commitment"]
+            },
+            {
+                "name": "AOXC-MODULE-ASSET",
+                "purpose": "native asset, wrapped assets, treasury accounting, bridge escrow and settlement balances",
+                "must_depend_on_relay": ["settlement_root", "governance", "security_policy"]
+            },
+            {
+                "name": "AOXC-MODULE-EXECUTION",
+                "purpose": "contracts, programmable actions, intents, and app-specific logic outside the relay core",
+                "must_depend_on_relay": ["checkpoint_acceptance", "message_bus", "governance"]
+            },
+            {
+                "name": "AOXC-MODULE-INTEROP",
+                "purpose": "single bridge domain with adapter families for external chain connectivity",
+                "adapters": ["evm", "solana", "utxo", "ibc", "object"],
+                "must_depend_on_relay": ["message_bus", "identity_root", "proof_anchoring", "security_policy"]
+            },
+            {
+                "name": "AOXC-MODULE-PROOF",
+                "purpose": "data commitments, proof publication, light-client support data, batch/blob references",
+                "must_depend_on_relay": ["state_commitment", "finality", "governance"]
+            }
+        ],
+        "message_envelope": {
+            "fields": [
+                "sourceModule",
+                "destinationModule",
+                "sourceChainFamily",
+                "targetChainFamily",
+                "nonce",
+                "payloadType",
+                "payloadHash",
+                "proofReference",
+                "feeClass",
+                "expiry",
+                "replayProtectionTag"
+            ]
+        },
+        "security_boundaries": {
+            "relay_core": [
+                "minimum_attack_surface",
+                "critical_state_only",
+                "no_heavy_app_logic",
+                "governance_controlled_upgrades"
+            ],
+            "modules": [
+                "separate_risk_domains",
+                "separate_rate_limits",
+                "separate_circuit_breakers",
+                "separate_fee_policies",
+                "separate_storage_proof_domains"
+            ]
+        },
+        "compatibility_strategy": {
+            "model": "functional modules + adapter families",
+            "do_not_do": "do not turn the relay chain into a heavy application chain",
+            "why": "chain families evolve, but identity, asset, execution, interop, and proof responsibilities remain stable"
+        }
     });
 
     println!(
@@ -1160,6 +1258,7 @@ mod tests {
     fn usage_text_mentions_port_map_and_network_port_override() {
         let usage = usage_text(CliLanguage::En);
         assert!(usage.contains("port-map"));
+        assert!(usage.contains("module-architecture"));
         assert!(
             usage.contains("network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]")
         );
