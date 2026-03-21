@@ -17,7 +17,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const DEFAULT_NETWORK_ID: u32 = 2626;
 
 /// Produces a single block from the provided transaction payload, updates the
-/// local node state, persists the result, and returns the refreshed snapshot.
+/// local node state, persists the refreshed snapshot, and returns the resulting
+/// in-memory state representation.
+///
+/// Security rationale:
+/// - State is loaded from the persisted source of truth before mutation.
+/// - A block proposal is derived deterministically from the current state.
+/// - The updated state is persisted only after the proposal has been applied.
 pub fn produce_once(tx: &str) -> Result<NodeState, AppError> {
     let mut state = load_state()?;
     state.running = true;
@@ -30,7 +36,12 @@ pub fn produce_once(tx: &str) -> Result<NodeState, AppError> {
 }
 
 /// Produces a deterministic sequence of block proposals using the supplied
-/// prefix and persists the final node state after all rounds complete.
+/// transaction prefix and persists the final state after all rounds complete.
+///
+/// Operational rationale:
+/// - Each round derives a unique transaction label from the provided prefix.
+/// - Block production advances monotonically from the latest mutable state.
+/// - Persistence occurs once at the end to avoid unnecessary write churn.
 pub fn run_rounds(rounds: u64, tx_prefix: &str) -> Result<NodeState, AppError> {
     let mut state = load_state()?;
     state.running = true;
@@ -48,6 +59,13 @@ pub fn run_rounds(rounds: u64, tx_prefix: &str) -> Result<NodeState, AppError> {
 /// Constructs a synthetic block proposal using the current node state as the
 /// parent reference and the provided transaction payload as deterministic input
 /// material for lane commitments.
+///
+/// Audit notes:
+/// - Height and round advance using saturating arithmetic to avoid panic-driven
+///   failure modes under unexpected upper-bound conditions.
+/// - Parent hash decoding is strictly validated as a 32-byte value.
+/// - Domain-separated digest derivation is used for all synthetic commitments
+///   to avoid accidental cross-field hash reuse.
 fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
     let height = state.current_height.saturating_add(1);
     let round = state.consensus.last_round.saturating_add(1);
@@ -91,8 +109,14 @@ fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
         })
 }
 
-/// Applies the proposed block to the mutable node state and refreshes the
-/// persisted consensus snapshot metadata.
+/// Applies the proposed block to mutable node state and refreshes the compact
+/// consensus snapshot retained by the node subsystem.
+///
+/// Integrity rationale:
+/// - The state height is sourced from the block header rather than recomputed.
+/// - Produced block count advances with saturating arithmetic.
+/// - Consensus snapshot metadata is always regenerated from the canonical
+///   message representation to reduce divergence risk.
 fn apply_block_proposal(state: &mut NodeState, tx: &str, block: &Block) {
     let message = ConsensusMessage::BlockProposal {
         block: block.clone(),
@@ -107,6 +131,11 @@ fn apply_block_proposal(state: &mut NodeState, tx: &str, block: &Block) {
 
 /// Converts a consensus message into the compact snapshot representation stored
 /// by the node state subsystem.
+///
+/// Design rationale:
+/// - Block proposals preserve full metadata needed for local replay context.
+/// - Vote and finalize messages fall back to the default network identifier
+///   because their persisted form does not carry an explicit network field.
 fn snapshot_from_message(message: &ConsensusMessage) -> ConsensusSnapshot {
     match message {
         ConsensusMessage::BlockProposal { block } => ConsensusSnapshot {
@@ -144,6 +173,11 @@ fn snapshot_from_message(message: &ConsensusMessage) -> ConsensusSnapshot {
 
 /// Decodes a hex-encoded 32-byte value and rejects malformed or incorrectly
 /// sized input with a structured application error.
+///
+/// Validation guarantees:
+/// - Hex decoding errors are surfaced with source context.
+/// - Non-32-byte payloads are rejected explicitly.
+/// - No truncation or implicit padding is permitted.
 fn decode_hash32(value: &str, field: &str, code: ErrorCode) -> Result<[u8; 32], AppError> {
     let bytes = hex::decode(value).map_err(|error| {
         AppError::with_source(code, format!("Failed to decode {field} as hex"), error)
@@ -162,6 +196,10 @@ fn decode_hash32(value: &str, field: &str, code: ErrorCode) -> Result<[u8; 32], 
 }
 
 /// Derives a deterministic 32-byte digest under a domain-separated label.
+///
+/// Cryptographic hygiene rationale:
+/// - Domain separation reduces accidental semantic collisions between fields.
+/// - The helper is intentionally minimal and side-effect free.
 fn derive_digest32(domain: &str, payload: &[u8]) -> [u8; 32] {
     let mut hasher = Sha3_256::new();
     hasher.update(domain.as_bytes());
@@ -170,6 +208,11 @@ fn derive_digest32(domain: &str, payload: &[u8]) -> [u8; 32] {
 }
 
 /// Returns a non-zero UNIX timestamp for synthetic block production flows.
+///
+/// Safety rationale:
+/// - A fallback value of `1` prevents accidental zero timestamps in degraded
+///   clock scenarios.
+/// - The function remains deterministic in its lower bound guarantees.
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -212,7 +255,8 @@ mod tests {
         unsafe { env::set_var("AOXC_HOME", &home) };
 
         let state = bootstrap_state().expect("bootstrap must succeed");
-        let block = build_block_for_tx(&state, "tx-1").expect("block construction must succeed");
+        let block =
+            build_block_for_tx(&state, "tx-1").expect("block construction must succeed");
         assert_eq!(block.header.height, 1);
 
         let next_state = produce_once("tx-1").expect("produce_once must succeed");
@@ -234,6 +278,7 @@ mod tests {
 
         bootstrap_state().expect("bootstrap must succeed");
         let state = run_rounds(3, "bench").expect("run_rounds must succeed");
+
         assert_eq!(state.current_height, 3);
         assert_eq!(state.produced_blocks, 3);
         assert_eq!(state.last_tx, "bench-2");
