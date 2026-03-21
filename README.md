@@ -5,6 +5,7 @@
 
 # AOXChain
 ### Experimental Sovereign Coordination Chain
+#### AOXC Alpha: Genesis V1
 
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![Model](https://img.shields.io/badge/architecture-sovereign--core-purple)

@@ -32,6 +32,8 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
+const AOXC_RELEASE_NAME: &str = "AOXC Alpha: Genesis V1";
+
 fn main() {
     if let Err(error) = run_cli() {
         eprintln!("AOXCMD_ERROR: {error}");
@@ -95,8 +97,21 @@ fn apply_home_override(args: &[String]) {
 
 fn cmd_version() -> Result<(), String> {
     let build = BuildInfo::collect();
-    let output = serde_json::json!({
+    let output = version_payload(&build);
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
+}
+
+fn version_payload(build: &BuildInfo) -> serde_json::Value {
+    serde_json::json!({
         "name": "aoxcmd",
+        "release_name": AOXC_RELEASE_NAME,
         "version": build.semver,
         "git_commit": build.git_commit,
         "git_dirty": build.git_dirty,
@@ -109,7 +124,12 @@ fn cmd_version() -> Result<(), String> {
             "sha256": build.cert_sha256,
             "error": build.cert_error,
         }
-    });
+    })
+}
+
+fn cmd_build_manifest() -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let output = build_manifest_payload(&build);
 
     println!(
         "{}",
@@ -120,6 +140,11 @@ fn cmd_version() -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let enforce = arg_flag(args, "--enforce-official");
+    let official_release = is_official_release(&build);
+    let output = node_connection_policy_payload(&build);
 fn cmd_build_manifest() -> Result<(), String> {
     let build = BuildInfo::collect();
     let official_release = is_official_release(&build);
@@ -202,6 +227,7 @@ fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
 
 fn cmd_vision() -> Result<(), String> {
     let output = serde_json::json!({
+        "release_name": AOXC_RELEASE_NAME,
         "chain_positioning": "interop relay-oriented coordination chain",
         "primary_goal": "cross-chain compatibility and deterministic coordination over raw throughput",
         "execution_strategy": "sovereign constitutional local core + remote execution domains",
@@ -325,6 +351,63 @@ fn is_official_release(build: &BuildInfo) -> bool {
     let channel_ok = matches!(build.release_channel, "stable" | "official" | "mainnet");
     let cert_ok = !matches!(build.cert_sha256, "not-configured" | "unavailable");
     channel_ok && build.git_dirty == "false" && cert_ok && build.attestation_hash.len() == 64
+}
+
+fn build_manifest_payload(build: &BuildInfo) -> serde_json::Value {
+    let official_release = is_official_release(build);
+
+    serde_json::json!({
+        "artifact": {
+            "name": "aoxcmd",
+            "release_name": AOXC_RELEASE_NAME,
+            "version": build.semver,
+            "git_commit": build.git_commit,
+            "git_dirty": build.git_dirty,
+            "source_date_epoch": build.source_date_epoch,
+            "build_profile": build.build_profile,
+            "release_channel": build.release_channel,
+            "attestation_hash": build.attestation_hash,
+        },
+        "certificate": {
+            "path": build.cert_path,
+            "sha256": build.cert_sha256,
+            "error": build.cert_error,
+        },
+        "supply_chain_policy": {
+            "official_release": official_release,
+            "requires_embedded_certificate": true,
+            "requires_attestation_hash": true,
+            "accept_unofficial_node_builds": false,
+        }
+    })
+}
+
+fn node_connection_policy_payload(build: &BuildInfo) -> serde_json::Value {
+    let official_release = is_official_release(build);
+
+    serde_json::json!({
+        "local_build": {
+            "release_name": AOXC_RELEASE_NAME,
+            "version": build.semver,
+            "release_channel": build.release_channel,
+            "git_dirty": build.git_dirty,
+            "attestation_hash": build.attestation_hash,
+            "embedded_cert_sha256": build.cert_sha256,
+            "official_release": official_release,
+        },
+        "accepted_remote_policy": {
+            "require_mtls": true,
+            "require_certificate_fingerprint_match": true,
+            "require_attestation_hash_exchange": true,
+            "allow_unofficial_remote_builds": false,
+            "accepted_release_channels": ["stable", "official", "mainnet"],
+        },
+        "operator_guidance": [
+            "Embed a node certificate at build time with AOXC_EMBED_CERT_PATH",
+            "Distribute attestation_hash and certificate fingerprint via a signed release manifest",
+            "Reject ad-hoc local builds for production peering unless explicitly approved",
+        ]
+    })
 }
 
 fn cmd_module_architecture() -> Result<(), String> {
@@ -1406,6 +1489,9 @@ fn assert_mainnet_key_policy(args: &[String], profile: &str) -> Result<(), Strin
 mod tests {
     use super::{
         BuildInfo, CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
+        bootstrap_defaults, build_manifest_payload, detect_language, interop_assessment,
+        is_official_release, localized_unknown_command, node_connection_policy_payload, usage_text,
+        version_payload,
         bootstrap_defaults, detect_language, interop_assessment, is_official_release,
         localized_unknown_command, usage_text,
         CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
@@ -1543,5 +1629,49 @@ mod tests {
             ..official
         };
         assert!(!is_official_release(&unofficial));
+    }
+
+    #[test]
+    fn version_payload_contains_release_name_and_attestation_hash() {
+        let build = BuildInfo::collect();
+        let payload = version_payload(&build);
+
+        assert_eq!(payload["release_name"], "AOXC Alpha: Genesis V1");
+        assert!(payload["attestation_hash"].as_str().is_some());
+    }
+
+    #[test]
+    fn build_manifest_payload_contains_supply_chain_policy() {
+        let build = BuildInfo::collect();
+        let payload = build_manifest_payload(&build);
+
+        assert_eq!(
+            payload["artifact"]["release_name"],
+            "AOXC Alpha: Genesis V1"
+        );
+        assert_eq!(
+            payload["supply_chain_policy"]["accept_unofficial_node_builds"],
+            false
+        );
+        assert_eq!(
+            payload["supply_chain_policy"]["requires_attestation_hash"],
+            true
+        );
+    }
+
+    #[test]
+    fn node_connection_policy_payload_requires_mtls() {
+        let build = BuildInfo::collect();
+        let payload = node_connection_policy_payload(&build);
+
+        assert_eq!(
+            payload["local_build"]["release_name"],
+            "AOXC Alpha: Genesis V1"
+        );
+        assert_eq!(payload["accepted_remote_policy"]["require_mtls"], true);
+        assert_eq!(
+            payload["accepted_remote_policy"]["allow_unofficial_remote_builds"],
+            false
+        );
     }
 }

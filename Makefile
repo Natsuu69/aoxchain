@@ -1,3 +1,10 @@
+.PHONY: help alpha build build-release package-bin test check fmt clippy audit quality quality-quick quality-release ci run-local supervise-local audit-install produce-loop real-chain-prep real-chain-run real-chain-run-once real-chain-health real-chain-tail version manifest policy dev-bootstrap
+help:
+	@printf "\nAOXC Alpha: Genesis V1\n"
+	@printf "Experimental sovereign coordination chain developer surface\n\n"
+	@printf "Branding\n"
+	@printf "  make alpha            - print the current AOXC alpha banner\n\n"
+	@printf "Code quality\n"
 .PHONY: help build build-release package-bin test check fmt clippy audit quality quality-quick quality-release ci run-local supervise-local audit-install produce-loop real-chain-prep real-chain-run real-chain-run-once real-chain-health real-chain-tail version manifest policy dev-bootstrap
 help:
 	@printf "\nAOXChain developer targets\n\n"
@@ -7,11 +14,26 @@ help:
 	@printf "  make clippy           - run clippy across workspace targets\n"
 	@printf "  make quality-quick    - fmt/check/test quick gate\n"
 	@printf "  make quality          - full quality gate\n"
+	@printf "  make quality-release  - release-oriented quality gate\n\n"
+	@printf "Build and release identity\n"
 	@printf "  make quality-release  - release-oriented quality gate\n"
 	@printf "  make build-release    - build the release AOXC CLI\n"
 	@printf "  make package-bin      - copy release binary into ./bin\n"
 	@printf "  make version          - show AOXC build/version metadata\n"
 	@printf "  make manifest         - print build manifest and supply-chain policy\n"
+	@printf "  make policy           - print node connection policy\n\n"
+	@printf "Developer bootstrap\n"
+	@printf "  make dev-bootstrap    - print suggested developer bootstrap flow\n"
+	@printf "  make run-local        - run the local packaged node helper\n"
+	@printf "  make supervise-local  - run the local supervisor helper\n\n"
+	@printf "Local chain loop\n"
+	@printf "  make real-chain-run-once - run one bounded daemon cycle\n"
+	@printf "  make real-chain-run      - run the local real-chain daemon loop\n"
+	@printf "  make real-chain-health   - probe local network health\n"
+	@printf "  make real-chain-tail     - tail runtime and health logs\n\n"
+
+alpha:
+	@printf "AOXC Alpha: Genesis V1\n"
 	@printf "  make policy           - print node connection policy\n"
 	@printf "  make dev-bootstrap    - print suggested developer bootstrap flow\n"
 	@printf "  make real-chain-run   - run the local real-chain daemon loop\n"
