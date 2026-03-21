@@ -2,31 +2,27 @@
 
 ## Purpose
 
-`aoxcnet` is responsible for the **networking layer: discovery, gossip, sync, transport** domain within the AOXChain workspace.
+`aoxcnet` is the security-first networking plane for AOXChain. The crate is responsible for:
 
-## Code Scope
+- peer admission and certificate policy enforcement,
+- replay-resistant session establishment,
+- consensus gossip wrapping,
+- discovery and seed rotation,
+- sync request scheduling,
+- transport abstraction for secure and smoke-test paths,
+- metrics and audit-oriented diagnostics.
 
-- `discovery/`
-- `gossip/`
-- `p2p/`
-- `sync/`
-- `transport/`
-- `config.rs`
-- `metrics.rs`
+## Design Principles
 
-## Operational Notes
-
-- API and behavior changes should be evaluated for backward impact.
-- Prefer explicit parameters over implicit defaults in critical paths.
-- Security-impacting changes in this crate should be accompanied by test/example updates.
+- **Mutual trust is explicit.** Peers are admitted under a defined security policy.
+- **Replay resistance is mandatory.** Session-bound nonces and frame digests are enforced.
+- **Interop is typed.** External domains are represented with explicit identifiers.
+- **Deterministic diagnostics matter.** Failures produce stable error codes and metrics.
+- **Unsafe modes are explicit.** `Insecure` exists only for deterministic local validation.
 
 ## Local Validation
 
 ```bash
 cargo check -p aoxcnet
+cargo test -p aoxcnet -- --nocapture
 ```
-
-## Related Components
-
-- Top-level architecture: [`../../README.md`](../../README.md)
-- Crate catalog: [`../README.md`](../README.md)

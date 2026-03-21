@@ -1,9 +1,11 @@
 pub mod live_tcp;
 
+use serde::{Deserialize, Serialize};
+
 use crate::ports::P2P_PRIMARY_PORT;
 
-/// Supported transport protocols for AOXChain p2p links.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Supported transport protocols for AOXChain peer links.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransportKind {
     Tcp,
     Udp,
@@ -14,6 +16,8 @@ pub enum TransportKind {
 pub struct TransportConfig {
     pub kind: TransportKind,
     pub bind_addr: String,
+    pub require_mutual_auth: bool,
+    pub max_frame_bytes: usize,
 }
 
 impl Default for TransportConfig {
@@ -21,6 +25,8 @@ impl Default for TransportConfig {
         Self {
             kind: TransportKind::Quic,
             bind_addr: format!("0.0.0.0:{P2P_PRIMARY_PORT}"),
+            require_mutual_auth: true,
+            max_frame_bytes: 256 * 1024,
         }
     }
 }
