@@ -13,10 +13,14 @@ use aoxcnet::transport::live_tcp::run_live_tcp_smoke_on;
 use aoxcore::genesis::config::{GenesisConfig, SettlementLink, TREASURY_ACCOUNT};
 use aoxcore::genesis::loader::GenesisLoader;
 use aoxcore::identity::ca::CertificateAuthority;
+use aoxcore::identity::hd_path::HdPath;
+use aoxcore::identity::key_engine::{KeyEngine, MASTER_SEED_LEN};
 use aoxcore::protocol::{
     canonical_chain_families, canonical_message_envelope_fields, canonical_modules,
     canonical_sovereign_roots,
 };
+use serde::Serialize;
+use sha3::{Digest, Sha3_256};
 use std::collections::BTreeMap;
 
 mod cli_support;
@@ -28,11 +32,55 @@ use cli_support::{
 };
 
 use std::env;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::process;
 use std::thread;
 use std::time::Duration;
 
 const AOXC_RELEASE_NAME: &str = "AOXC Alpha: Genesis V1";
+const TESTNET_FIXTURE_MEMBERS: [(&str, &str, u16, u16, u16, &str); 5] = [
+    (
+        "atlas",
+        "Atlas Validator",
+        39001,
+        19101,
+        1,
+        "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+    ),
+    (
+        "boreal",
+        "Boreal Validator",
+        39002,
+        19102,
+        2,
+        "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+    ),
+    (
+        "cypher",
+        "Cypher Validator",
+        39003,
+        19103,
+        3,
+        "33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+    ),
+    (
+        "delta",
+        "Delta Validator",
+        39004,
+        19104,
+        4,
+        "44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444",
+    ),
+    (
+        "ember",
+        "Ember Validator",
+        39005,
+        19105,
+        5,
+        "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
+    ),
+];
 
 fn main() {
     if let Err(error) = run_cli() {
@@ -64,6 +112,7 @@ fn run_cli() -> Result<(), String> {
         "module-architecture" => cmd_module_architecture(),
         "compat-matrix" => cmd_compat_matrix(),
         "port-map" => cmd_port_map(),
+        "testnet-fixture-init" => cmd_testnet_fixture_init(&args[2..]),
         "key-bootstrap" => cmd_key_bootstrap(&args[2..]),
         "genesis-init" => cmd_genesis_init(&args[2..]),
         "node-bootstrap" => cmd_node_bootstrap(&args[2..]),
@@ -723,6 +772,241 @@ fn cmd_genesis_init(args: &[String]) -> Result<(), String> {
     );
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TestnetFixtureAccount {
+    slug: String,
+    display_name: String,
+    chain_num: u32,
+    hd_path: String,
+    master_seed_hex: String,
+    node_seed_path: String,
+    account_address: String,
+    validator_id_hex: String,
+    account_funding: String,
+    p2p_listen_addr: String,
+    rpc_addr: String,
+    peers: Vec<String>,
+    key_engine_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TestnetFixtureManifest {
+    profile: String,
+    chain_num: u32,
+    chain_id: String,
+    block_time_secs: u64,
+    security_mode: String,
+    fund_amount_per_account: String,
+    warning: String,
+    accounts: Vec<TestnetFixtureAccount>,
+}
+
+fn cmd_testnet_fixture_init(args: &[String]) -> Result<(), String> {
+    let output_dir = arg_value(args, "--output-dir")
+        .unwrap_or_else(|| "configs/deterministic-testnet".to_string());
+    let chain_num: u32 = arg_value(args, "--chain-num")
+        .unwrap_or_else(|| "77".to_string())
+        .parse()
+        .map_err(|_| "--chain-num must be a valid u32".to_string())?;
+    let fund_amount: u128 = arg_value(args, "--fund-amount")
+        .unwrap_or_else(|| "2500000000000000000000".to_string())
+        .parse()
+        .map_err(|_| "--fund-amount must be a valid u128".to_string())?;
+
+    let manifest = build_testnet_fixture_manifest(chain_num, fund_amount)?;
+    write_testnet_fixture(&output_dir, &manifest)?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "output_dir": output_dir,
+            "chain_id": manifest.chain_id,
+            "account_count": manifest.accounts.len(),
+            "accounts_file": format!("{}/accounts.json", output_dir),
+            "genesis_file": format!("{}/genesis.json", output_dir),
+            "launch_script": format!("{}/launch-testnet.sh", output_dir),
+            "warning": manifest.warning,
+        }))
+        .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
+}
+
+fn build_testnet_fixture_manifest(
+    chain_num: u32,
+    fund_amount: u128,
+) -> Result<TestnetFixtureManifest, String> {
+    let mut accounts = Vec::with_capacity(TESTNET_FIXTURE_MEMBERS.len());
+
+    for (slug, display_name, p2p_port, rpc_port, zone, master_seed_hex) in TESTNET_FIXTURE_MEMBERS {
+        let seed = decode_master_seed_hex(master_seed_hex)?;
+        let key_engine = KeyEngine::from_seed(seed);
+        let hd_path = HdPath::new(chain_num, 1, u32::from(zone), 0)
+            .map_err(|error| format!("invalid deterministic hd path: {error}"))?;
+        let entropy = key_engine.derive_entropy(&hd_path);
+        let account_address = deterministic_address(slug, &entropy);
+        let validator_id_hex = hex::encode_upper(&entropy[..32]);
+
+        let peers = TESTNET_FIXTURE_MEMBERS
+            .iter()
+            .filter(|(peer_slug, ..)| peer_slug != &slug)
+            .map(|(_, _, peer_p2p_port, ..)| format!("127.0.0.1:{peer_p2p_port}"))
+            .collect();
+
+        accounts.push(TestnetFixtureAccount {
+            slug: slug.to_string(),
+            display_name: display_name.to_string(),
+            chain_num,
+            hd_path: hd_path.to_string(),
+            master_seed_hex: master_seed_hex.to_string(),
+            node_seed_path: "identity/test-node-seed.hex".to_string(),
+            account_address,
+            validator_id_hex,
+            account_funding: fund_amount.to_string(),
+            p2p_listen_addr: format!("127.0.0.1:{p2p_port}"),
+            rpc_addr: format!("127.0.0.1:{rpc_port}"),
+            peers,
+            key_engine_fingerprint: key_engine.fingerprint(),
+        });
+    }
+
+    Ok(TestnetFixtureManifest {
+        profile: "deterministic-testnet".to_string(),
+        chain_num,
+        chain_id: GenesisConfig::generate_chain_id(chain_num),
+        block_time_secs: 4,
+        security_mode: "mutual_auth_test_fixture".to_string(),
+        fund_amount_per_account: fund_amount.to_string(),
+        warning: "TEST ONLY: all seeds in this fixture are public and must never be used in production."
+            .to_string(),
+        accounts,
+    })
+}
+
+fn write_testnet_fixture(output_dir: &str, manifest: &TestnetFixtureManifest) -> Result<(), String> {
+    fs::create_dir_all(output_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(format!("{output_dir}/nodes")).map_err(|error| error.to_string())?;
+    fs::create_dir_all(format!("{output_dir}/homes")).map_err(|error| error.to_string())?;
+
+    let accounts_json = serde_json::to_vec_pretty(manifest)
+        .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?;
+    fs::write(format!("{output_dir}/accounts.json"), accounts_json).map_err(|error| error.to_string())?;
+
+    let mut genesis = GenesisConfig::new();
+    genesis.chain_num = manifest.chain_num;
+    genesis.chain_id = manifest.chain_id.clone();
+    genesis.block_time = manifest.block_time_secs;
+    genesis.treasury = 5_000_000_000_000;
+    genesis.add_account(TREASURY_ACCOUNT.to_string(), genesis.treasury);
+    for account in &manifest.accounts {
+        genesis.add_account(
+            account.account_address.clone(),
+            account
+                .account_funding
+                .parse()
+                .map_err(|_| "invalid account_funding in manifest".to_string())?,
+        );
+    }
+    GenesisLoader::save(&genesis, format!("{output_dir}/genesis.json"))
+        .map_err(|error| error.to_string())?;
+
+    for account in &manifest.accounts {
+        fs::write(
+            format!("{output_dir}/nodes/{}.toml", account.slug),
+            render_node_toml(account, manifest),
+        )
+        .map_err(|error| error.to_string())?;
+
+        let home_identity_dir = format!("{output_dir}/homes/{}/identity", account.slug);
+        fs::create_dir_all(&home_identity_dir).map_err(|error| error.to_string())?;
+        fs::write(
+            format!("{home_identity_dir}/test-node-seed.hex"),
+            format!("{}\n", account.master_seed_hex),
+        )
+        .map_err(|error| error.to_string())?;
+        fs::copy(
+            format!("{output_dir}/genesis.json"),
+            format!("{home_identity_dir}/genesis.json"),
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    let launch_script_path = format!("{output_dir}/launch-testnet.sh");
+    fs::write(&launch_script_path, render_launch_script(manifest)).map_err(|error| error.to_string())?;
+    let permissions = fs::Permissions::from_mode(0o755);
+    fs::set_permissions(&launch_script_path, permissions).map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+fn render_node_toml(account: &TestnetFixtureAccount, manifest: &TestnetFixtureManifest) -> String {
+    let peers = account
+        .peers
+        .iter()
+        .map(|peer| format!("  \"{peer}\""))
+        .collect::<Vec<_>>()
+        .join(",\n");
+
+    format!(
+        "chain_id = \"{}\"\nnode_name = \"{}\"\nlisten_addr = \"{}\"\nrpc_addr = \"{}\"\npeers = [\n{}\n]\nsecurity_mode = \"{}\"\nhd_path = \"{}\"\nvalidator_id_hex = \"{}\"\naccount_address = \"{}\"\nwarning = \"TEST ONLY - public fixture seed\"\n",
+        manifest.chain_id,
+        account.slug,
+        account.p2p_listen_addr,
+        account.rpc_addr,
+        peers,
+        manifest.security_mode,
+        account.hd_path,
+        account.validator_id_hex,
+        account.account_address,
+    )
+}
+
+fn render_launch_script(manifest: &TestnetFixtureManifest) -> String {
+    let mut script = String::from(
+        "#!/usr/bin/env bash\nset -euo pipefail\n\nROOT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\nAOXC_BIN=\"${AOXC_BIN:-cargo run -q -p aoxcmd --}\"\nROUNDS=\"${ROUNDS:-2}\"\nSLEEP_MS=\"${SLEEP_MS:-250}\"\n\necho \"[fixture] chain_id=",
+    );
+    script.push_str(&manifest.chain_id);
+    script.push_str("\"\n");
+    script.push_str("echo \"[fixture] TEST ONLY seeds are public; do not reuse outside local/dev environments.\"\n\n");
+
+    for account in &manifest.accounts {
+        let tx_prefix = format!("{}-TX", account.slug.to_uppercase());
+        script.push_str(&format!(
+            "echo \"[fixture] bootstrapping {slug}\" \n$AOXC_BIN node-bootstrap --home \"$ROOT_DIR/homes/{slug}\" >/tmp/aoxc-{slug}-bootstrap.json\n$AOXC_BIN node-run --home \"$ROOT_DIR/homes/{slug}\" --rounds \"$ROUNDS\" --sleep-ms \"$SLEEP_MS\" --tx-prefix \"{tx_prefix}\" >/tmp/aoxc-{slug}-run.json\n",
+            slug = account.slug,
+            tx_prefix = tx_prefix,
+        ));
+    }
+
+    script
+}
+
+fn decode_master_seed_hex(value: &str) -> Result<[u8; MASTER_SEED_LEN], String> {
+    let raw = hex::decode(value).map_err(|_| "fixture seed must be valid hex".to_string())?;
+    if raw.len() != MASTER_SEED_LEN {
+        return Err(format!(
+            "fixture seed must be {MASTER_SEED_LEN} bytes, got {}",
+            raw.len()
+        ));
+    }
+
+    let mut seed = [0u8; MASTER_SEED_LEN];
+    seed.copy_from_slice(&raw);
+    Ok(seed)
+}
+
+fn deterministic_address(slug: &str, entropy: &[u8]) -> String {
+    let mut hasher = Sha3_256::new();
+    hasher.update(b"AOXC-TESTNET-FIXTURE-ADDRESS-V1");
+    hasher.update([0x00]);
+    hasher.update(slug.as_bytes());
+    hasher.update([0x00]);
+    hasher.update(entropy);
+    let digest = hasher.finalize();
+    format!("AOXC_TEST_{}", hex::encode_upper(&digest[..20]))
 }
 
 fn cmd_node_bootstrap(args: &[String]) -> Result<(), String> {
@@ -1510,6 +1794,9 @@ fn assert_mainnet_key_policy(args: &[String], profile: &str) -> Result<(), Strin
 mod tests {
     use super::{
         BuildInfo, CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
+        bootstrap_defaults, build_manifest_payload, build_testnet_fixture_manifest,
+        detect_language, interop_assessment, is_official_release, localized_unknown_command,
+        node_connection_policy_payload, render_launch_script, usage_text, version_payload,
         bootstrap_defaults, build_manifest_payload, detect_language, interop_assessment,
         is_official_release, localized_unknown_command, node_connection_policy_payload, usage_text,
         version_payload,
@@ -1694,5 +1981,34 @@ mod tests {
             payload["accepted_remote_policy"]["allow_unofficial_remote_builds"],
             false
         );
+    }
+
+    #[test]
+    fn testnet_fixture_manifest_contains_five_named_accounts() {
+        let manifest =
+            build_testnet_fixture_manifest(77, 2_500_000_000_000_000_000_000).expect("fixture");
+
+        assert_eq!(manifest.accounts.len(), 5);
+        assert_eq!(manifest.chain_id, "AOXC-0077-MAIN");
+        assert_eq!(manifest.accounts[0].slug, "atlas");
+        assert!(manifest.accounts.iter().all(|account| {
+            account.master_seed_hex.len() == 128
+                && account.account_address.starts_with("AOXC_TEST_")
+                && account.validator_id_hex.len() == 64
+        }));
+    }
+
+    #[test]
+    fn testnet_launch_script_mentions_each_fixture_home() {
+        let manifest =
+            build_testnet_fixture_manifest(77, 2_500_000_000_000_000_000_000).expect("fixture");
+        let script = render_launch_script(&manifest);
+
+        assert!(script.contains("homes/atlas"));
+        assert!(script.contains("homes/boreal"));
+        assert!(script.contains("homes/cypher"));
+        assert!(script.contains("homes/delta"));
+        assert!(script.contains("homes/ember"));
+        assert!(script.contains("TEST ONLY seeds are public"));
     }
 }
