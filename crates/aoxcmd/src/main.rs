@@ -1,3 +1,5 @@
+use aoxcmd::cli::run_cli;
+use std::process;
 use aoxcmd::build_info::BuildInfo;
 use aoxcmd::data_home;
 use aoxcmd::economy::ledger::EconomyState;
