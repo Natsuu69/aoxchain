@@ -1,15 +1,21 @@
 use crate::{
 <<<<<<< HEAD
+<<<<<<< HEAD
     error::AppError,
     node::{
         lifecycle::{load_state, persist_state},
         state::NodeState,
 =======
+=======
+>>>>>>> 8d5616a (commit(aoxc-dev): 🔄 sync [878677b] at 2026-03-22 01:31:22 ✅ verified 🛡️)
     error::{AppError, ErrorCode},
     node::{
         lifecycle::{load_state, persist_state},
         state::{ConsensusSnapshot, NodeState},
+<<<<<<< HEAD
 >>>>>>> 0cfb403 (Refactor aoxcmd node engine for consensus API)
+=======
+>>>>>>> 8d5616a (commit(aoxc-dev): 🔄 sync [878677b] at 2026-03-22 01:31:22 ✅ verified 🛡️)
     },
 };
 use aoxcunity::{
@@ -50,12 +56,15 @@ fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
     let height = state.current_height.saturating_add(1);
     let round = state.consensus.last_round.saturating_add(1);
     let timestamp = unix_now();
+
     let parent_hash = decode_hash32(
         &state.consensus.last_block_hash_hex,
         "last_block_hash_hex",
         ErrorCode::NodeStateInvalid,
     )?;
-    let proposer = derive_digest32("AOXC-CMD-PROPOSER", tx.as_bytes());
+
+    let proposer_key = derive_digest32("AOXC-CMD-PROPOSER", tx.as_bytes());
+
     let lane_commitment = LaneCommitment {
         lane_id: 1,
         lane_type: LaneType::Native,
@@ -73,7 +82,8 @@ fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
         })],
     };
 
-    let proposer = Proposer::new(state.consensus.network_id.max(1), proposer);
+    let proposer = Proposer::new(state.consensus.network_id.max(1), proposer_key);
+
     proposer
         .propose(parent_hash, height, 0, round, timestamp, body)
         .map_err(|error| {
@@ -185,6 +195,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after epoch")
             .as_nanos();
+
         let path = env::temp_dir().join(format!("aoxcmd-node-tests-{nonce}"));
         fs::create_dir_all(&path).expect("temp dir should be created");
         path.display().to_string()
