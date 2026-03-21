@@ -246,6 +246,9 @@ fn cmd_module_architecture() -> Result<(), String> {
         "relay_core": {
             "principle": "keep the relay chain thin, neutral, and durable",
             "canonical_modules": relay_module_names,
+    let output = serde_json::json!({
+        "relay_core": {
+            "principle": "keep the relay chain thin, neutral, and durable",
             "responsibilities": [
                 "finality_ordering",
                 "shared_security",
@@ -287,6 +290,19 @@ fn cmd_module_architecture() -> Result<(), String> {
         ],
         "message_envelope": {
             "fields": envelope_fields
+            "fields": [
+                "sourceModule",
+                "destinationModule",
+                "sourceChainFamily",
+                "targetChainFamily",
+                "nonce",
+                "payloadType",
+                "payloadHash",
+                "proofReference",
+                "feeClass",
+                "expiry",
+                "replayProtectionTag"
+            ]
         },
         "security_boundaries": {
             "relay_core": [
@@ -1291,6 +1307,9 @@ mod tests {
         BuildInfo, CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
         bootstrap_defaults, detect_language, interop_assessment, is_official_release,
         localized_unknown_command, usage_text,
+        CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
+        bootstrap_defaults, detect_language, interop_assessment, localized_unknown_command,
+        usage_text,
     };
 
     #[test]

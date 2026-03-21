@@ -182,6 +182,7 @@ Commands:
   vision
   build-manifest
   node-connection-policy [--enforce-official]
+
   module-architecture
   compat-matrix
   port-map
