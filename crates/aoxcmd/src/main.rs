@@ -82,50 +82,6 @@ const TESTNET_FIXTURE_MEMBERS: [(&str, &str, u16, u16, u16, &str); 5] = [
     ),
 ];
 
-const AOXC_RELEASE_NAME: &str = "AOXC Alpha: Genesis V1";
-const TESTNET_FIXTURE_MEMBERS: [(&str, &str, u16, u16, u16, &str); 5] = [
-    (
-        "atlas",
-        "Atlas Validator",
-        39001,
-        19101,
-        1,
-        "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
-    ),
-    (
-        "boreal",
-        "Boreal Validator",
-        39002,
-        19102,
-        2,
-        "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
-    ),
-    (
-        "cypher",
-        "Cypher Validator",
-        39003,
-        19103,
-        3,
-        "33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
-    ),
-    (
-        "delta",
-        "Delta Validator",
-        39004,
-        19104,
-        4,
-        "44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444",
-    ),
-    (
-        "ember",
-        "Ember Validator",
-        39005,
-        19105,
-        5,
-        "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
-    ),
-];
-
 fn main() {
     if let Err(error) = run_cli() {
         eprintln!("AOXCMD_ERROR: {error}");
@@ -240,112 +196,6 @@ fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
     let enforce = arg_flag(args, "--enforce-official");
     let official_release = is_official_release(&build);
     let output = node_connection_policy_payload(&build);
-fn cmd_build_manifest() -> Result<(), String> {
-    let build = BuildInfo::collect();
-    let official_release = is_official_release(&build);
-
-    let output = serde_json::json!({
-        "artifact": {
-            "name": "aoxcmd",
-            "version": build.semver,
-            "git_commit": build.git_commit,
-            "git_dirty": build.git_dirty,
-            "source_date_epoch": build.source_date_epoch,
-            "build_profile": build.build_profile,
-            "release_channel": build.release_channel,
-            "attestation_hash": build.attestation_hash,
-        },
-        "certificate": {
-            "path": build.cert_path,
-            "sha256": build.cert_sha256,
-            "error": build.cert_error,
-        },
-        "supply_chain_policy": {
-            "official_release": official_release,
-            "requires_embedded_certificate": true,
-            "requires_attestation_hash": true,
-            "accept_unofficial_node_builds": false,
-        }
-    });
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output)
-            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
-    );
-
-    Ok(())
-}
-
-fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
-    let build = BuildInfo::collect();
-    let official_release = is_official_release(&build);
-    let enforce = arg_flag(args, "--enforce-official");
-
-    let output = serde_json::json!({
-        "local_build": {
-            "version": build.semver,
-            "release_channel": build.release_channel,
-            "git_dirty": build.git_dirty,
-            "attestation_hash": build.attestation_hash,
-            "embedded_cert_sha256": build.cert_sha256,
-            "official_release": official_release,
-        },
-        "accepted_remote_policy": {
-            "require_mtls": true,
-            "require_certificate_fingerprint_match": true,
-            "require_attestation_hash_exchange": true,
-            "allow_unofficial_remote_builds": false,
-            "accepted_release_channels": ["stable", "official", "mainnet"],
-        },
-        "operator_guidance": [
-            "Embed a node certificate at build time with AOXC_EMBED_CERT_PATH",
-            "Distribute attestation_hash and certificate fingerprint via a signed release manifest",
-            "Reject ad-hoc local builds for production peering unless explicitly approved",
-        ]
-    });
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output)
-            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
-    );
-
-    if enforce && !official_release {
-        return Err(
-            "official node policy failed: build is not an official release artifact".to_string(),
-        );
-    }
-
-    Ok(())
-}
-
-fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
-    let build = BuildInfo::collect();
-    let enforce = arg_flag(args, "--enforce-official");
-    let official_release = is_official_release(&build);
-    let output = node_connection_policy_payload(&build);
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output)
-            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
-    );
-
-    if enforce && !official_release {
-        return Err(
-            "official node policy failed: build is not an official release artifact".to_string(),
-        );
-    }
-
-    Ok(())
-}
-
-fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
-    let build = BuildInfo::collect();
-    let enforce = arg_flag(args, "--enforce-official");
-    let official_release = is_official_release(&build);
-    let output = node_connection_policy_payload(&build);
 
     println!(
         "{}",
@@ -363,29 +213,23 @@ fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
 }
 
 fn cmd_vision() -> Result<(), String> {
+    let sovereign_roots: Vec<&str> = canonical_sovereign_roots()
+        .iter()
+        .map(|root| root.as_str())
+        .collect();
+    let attached_modules: Vec<&str> = canonical_modules()
+        .iter()
+        .map(|module| module.as_str())
+        .collect();
+
     let output = serde_json::json!({
         "release_name": AOXC_RELEASE_NAME,
         "chain_positioning": "interop relay-oriented coordination chain",
         "primary_goal": "cross-chain compatibility and deterministic coordination over raw throughput",
         "execution_strategy": "sovereign constitutional local core + remote execution domains",
-        "recommended_topology": "local sovereign root modules + remote chain contracts/execution adapters",
-        "constitutional_roots": [
-            "identity",
-            "supply",
-            "governance",
-            "relay",
-            "security",
-            "settlement",
-            "treasury"
-        "execution_strategy": "multi-lane model compatible with heterogeneous external networks",
         "recommended_topology": "thin relay core + five attached functional modules",
-        "functional_modules": [
-            "identity",
-            "asset_treasury",
-            "smart_execution",
-            "interop_bridge",
-            "data_proof"
-        ],
+        "constitutional_roots": sovereign_roots,
+        "functional_modules": attached_modules,
         "identity_model": "post-quantum capable key/certificate/passport pipeline",
         "consensus_model": "quorum-based proposer/vote/finalization with explicit rotation",
         "status": "pre-mainnet; deterministic local smoke path available"
@@ -567,9 +411,6 @@ fn cmd_module_architecture() -> Result<(), String> {
             "principle": "keep the relay chain thin, neutral, and durable",
             "canonical_modules": relay_module_names,
             "sovereign_roots": sovereign_roots,
-    let output = serde_json::json!({
-        "relay_core": {
-            "principle": "keep the relay chain thin, neutral, and durable",
             "responsibilities": [
                 "finality_ordering",
                 "shared_security",
@@ -611,19 +452,6 @@ fn cmd_module_architecture() -> Result<(), String> {
         ],
         "message_envelope": {
             "fields": envelope_fields
-            "fields": [
-                "sourceModule",
-                "destinationModule",
-                "sourceChainFamily",
-                "targetChainFamily",
-                "nonce",
-                "payloadType",
-                "payloadHash",
-                "proofReference",
-                "feeClass",
-                "expiry",
-                "replayProtectionTag"
-            ]
         },
         "security_boundaries": {
             "relay_core": [
