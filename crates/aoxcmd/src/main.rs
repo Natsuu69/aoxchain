@@ -55,6 +55,8 @@ fn run_cli() -> Result<(), String> {
             Ok(())
         }
         "vision" => cmd_vision(),
+        "build-manifest" => cmd_build_manifest(),
+        "node-connection-policy" => cmd_node_connection_policy(&args[2..]),
         "module-architecture" => cmd_module_architecture(),
         "compat-matrix" => cmd_compat_matrix(),
         "port-map" => cmd_port_map(),
@@ -97,6 +99,9 @@ fn cmd_version() -> Result<(), String> {
         "git_commit": build.git_commit,
         "git_dirty": build.git_dirty,
         "source_date_epoch": build.source_date_epoch,
+        "build_profile": build.build_profile,
+        "release_channel": build.release_channel,
+        "attestation_hash": build.attestation_hash,
         "embedded_cert": {
             "path": build.cert_path,
             "sha256": build.cert_sha256,
@@ -109,6 +114,86 @@ fn cmd_version() -> Result<(), String> {
         serde_json::to_string_pretty(&output)
             .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
     );
+
+    Ok(())
+}
+
+fn cmd_build_manifest() -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let official_release = is_official_release(&build);
+
+    let output = serde_json::json!({
+        "artifact": {
+            "name": "aoxcmd",
+            "version": build.semver,
+            "git_commit": build.git_commit,
+            "git_dirty": build.git_dirty,
+            "source_date_epoch": build.source_date_epoch,
+            "build_profile": build.build_profile,
+            "release_channel": build.release_channel,
+            "attestation_hash": build.attestation_hash,
+        },
+        "certificate": {
+            "path": build.cert_path,
+            "sha256": build.cert_sha256,
+            "error": build.cert_error,
+        },
+        "supply_chain_policy": {
+            "official_release": official_release,
+            "requires_embedded_certificate": true,
+            "requires_attestation_hash": true,
+            "accept_unofficial_node_builds": false,
+        }
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    Ok(())
+}
+
+fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let official_release = is_official_release(&build);
+    let enforce = arg_flag(args, "--enforce-official");
+
+    let output = serde_json::json!({
+        "local_build": {
+            "version": build.semver,
+            "release_channel": build.release_channel,
+            "git_dirty": build.git_dirty,
+            "attestation_hash": build.attestation_hash,
+            "embedded_cert_sha256": build.cert_sha256,
+            "official_release": official_release,
+        },
+        "accepted_remote_policy": {
+            "require_mtls": true,
+            "require_certificate_fingerprint_match": true,
+            "require_attestation_hash_exchange": true,
+            "allow_unofficial_remote_builds": false,
+            "accepted_release_channels": ["stable", "official", "mainnet"],
+        },
+        "operator_guidance": [
+            "Embed a node certificate at build time with AOXC_EMBED_CERT_PATH",
+            "Distribute attestation_hash and certificate fingerprint via a signed release manifest",
+            "Reject ad-hoc local builds for production peering unless explicitly approved",
+        ]
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    if enforce && !official_release {
+        return Err(
+            "official node policy failed: build is not an official release artifact".to_string(),
+        );
+    }
 
     Ok(())
 }
@@ -138,6 +223,12 @@ fn cmd_vision() -> Result<(), String> {
     );
 
     Ok(())
+}
+
+fn is_official_release(build: &BuildInfo) -> bool {
+    let channel_ok = matches!(build.release_channel, "stable" | "official" | "mainnet");
+    let cert_ok = !matches!(build.cert_sha256, "not-configured" | "unavailable");
+    channel_ok && build.git_dirty == "false" && cert_ok && build.attestation_hash.len() == 64
 }
 
 fn cmd_module_architecture() -> Result<(), String> {
@@ -1213,6 +1304,9 @@ fn assert_mainnet_key_policy(args: &[String], profile: &str) -> Result<(), Strin
 #[cfg(test)]
 mod tests {
     use super::{
+        BuildInfo, CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
+        bootstrap_defaults, detect_language, interop_assessment, is_official_release,
+        localized_unknown_command, usage_text,
         CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
         bootstrap_defaults, detect_language, interop_assessment, localized_unknown_command,
         usage_text,
@@ -1277,6 +1371,8 @@ mod tests {
     fn usage_text_mentions_port_map_and_network_port_override() {
         let usage = usage_text(CliLanguage::En);
         assert!(usage.contains("port-map"));
+        assert!(usage.contains("build-manifest"));
+        assert!(usage.contains("node-connection-policy"));
         assert!(usage.contains("module-architecture"));
         assert!(
             usage.contains("network-smoke [--timeout-ms <u64>] [--bind-host <addr>] [--port <u16>] [--payload <text>]")
@@ -1322,5 +1418,28 @@ mod tests {
         assert!(!assessment.can_claim_100_percent_security);
         assert!(!assessment.hard_blockers.is_empty());
         assert!(!assessment.missing_critical_controls.is_empty());
+    }
+
+    #[test]
+    fn official_release_policy_requires_clean_certified_stable_build() {
+        let official = BuildInfo {
+            semver: "0.1.0",
+            git_commit: "abc123",
+            git_dirty: "false",
+            source_date_epoch: "123456",
+            build_profile: "release",
+            release_channel: "stable",
+            attestation_hash: "a".repeat(64).leak(),
+            cert_path: "/tmp/server.crt",
+            cert_sha256: "b".repeat(64).leak(),
+            cert_error: "none",
+        };
+        assert!(is_official_release(&official));
+
+        let unofficial = BuildInfo {
+            git_dirty: "true",
+            ..official
+        };
+        assert!(!is_official_release(&unofficial));
     }
 }
