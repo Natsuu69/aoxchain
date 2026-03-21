@@ -6,5 +6,4 @@ pub mod metrics;
 pub mod p2p;
 pub mod ports;
 pub mod sync;
-
 pub mod transport;

@@ -1,65 +1,65 @@
-use aoxcunity::messages::ConsensusMessage;
+use std::collections::VecDeque;
 
-use crate::config::SecurityMode;
+use aoxcunity::messages::ConsensusMessage;
+use blake3::Hasher;
+
+use crate::config::NetworkConfig;
 use crate::error::NetworkError;
 use crate::gossip::peer::Peer;
-use crate::p2p::P2PNetwork;
+use crate::p2p::{P2PNetwork, ProtocolEnvelope};
 
 /// Gossip engine responsible for propagating and receiving consensus messages.
 #[derive(Debug, Clone)]
 pub struct GossipEngine {
     network: P2PNetwork,
-}
-
-impl Default for GossipEngine {
-    fn default() -> Self {
-        Self::new()
-    }
+    recent_message_ids: VecDeque<String>,
+    max_recent_ids: usize,
 }
 
 impl GossipEngine {
-    /// Creates a new gossip engine instance with secure defaults.
-    pub fn new() -> Self {
+    #[must_use]
+    pub fn new(config: NetworkConfig) -> Self {
         Self {
-            network: P2PNetwork::new(SecurityMode::MutualAuth, 128),
+            network: P2PNetwork::new(config.clone()),
+            recent_message_ids: VecDeque::new(),
+            max_recent_ids: config.max_gossip_batch.saturating_mul(4),
         }
     }
 
-    /// Registers peer identity and certificate chain metadata.
     pub fn register_peer(&mut self, peer: Peer) -> Result<(), NetworkError> {
         self.network.register_peer(peer)
     }
 
-    /// Establishes session tickets for a peer.
     pub fn establish_session(&mut self, peer_id: &str) -> Result<(), NetworkError> {
         self.network.establish_session(peer_id).map(|_| ())
     }
 
-    /// Broadcasts a consensus message to connected peers.
-    ///
-    /// Backward-compatible path used by existing CLI smoke flows.
-    pub fn broadcast(&mut self, msg: ConsensusMessage) {
-        self.network.broadcast_compat(msg);
-    }
-
-    /// Secure broadcast from a known peer id.
     pub fn broadcast_from_peer(
         &mut self,
         peer_id: &str,
-        msg: ConsensusMessage,
-    ) -> Result<(), NetworkError> {
-        self.network.broadcast_secure(peer_id, msg)
+        message: ConsensusMessage,
+    ) -> Result<ProtocolEnvelope, NetworkError> {
+        let message_id = digest_message(&message)?;
+        if self.recent_message_ids.iter().any(|existing| existing == &message_id) {
+            return Err(NetworkError::ReplayDetected);
+        }
+        let envelope = self.network.broadcast_secure(peer_id, message)?;
+        self.recent_message_ids.push_back(message_id);
+        while self.recent_message_ids.len() > self.max_recent_ids {
+            self.recent_message_ids.pop_front();
+        }
+        Ok(envelope)
     }
 
-    /// Receives the next available consensus message from the gossip layer.
     pub fn receive(&mut self) -> Option<ConsensusMessage> {
         self.network.receive()
     }
+}
 
-    pub fn stats(&self) -> (usize, usize) {
-        (
-            self.network.registered_peers(),
-            self.network.active_sessions(),
-        )
-    }
+fn digest_message(message: &ConsensusMessage) -> Result<String, NetworkError> {
+    let bytes = serde_json::to_vec(message).map_err(|e| NetworkError::Serialization(e.to_string()))?;
+    let mut hasher = Hasher::new();
+    hasher.update(b"AOXC-GOSSIP-MESSAGE-V1");
+    hasher.update(&bytes);
+    Ok(hasher.finalize().to_hex().to_string())
 }
