@@ -20,6 +20,7 @@ use aoxcore::protocol::{
     canonical_sovereign_roots,
 };
 use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha3::{Digest, Sha3_256};
 use std::collections::BTreeMap;
 
@@ -37,6 +38,50 @@ use std::os::unix::fs::PermissionsExt;
 use std::process;
 use std::thread;
 use std::time::{Duration, Instant};
+
+const AOXC_RELEASE_NAME: &str = "AOXC Alpha: Genesis V1";
+const TESTNET_FIXTURE_MEMBERS: [(&str, &str, u16, u16, u16, &str); 5] = [
+    (
+        "atlas",
+        "Atlas Validator",
+        39001,
+        19101,
+        1,
+        "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+    ),
+    (
+        "boreal",
+        "Boreal Validator",
+        39002,
+        19102,
+        2,
+        "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+    ),
+    (
+        "cypher",
+        "Cypher Validator",
+        39003,
+        19103,
+        3,
+        "33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+    ),
+    (
+        "delta",
+        "Delta Validator",
+        39004,
+        19104,
+        4,
+        "44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444",
+    ),
+    (
+        "ember",
+        "Ember Validator",
+        39005,
+        19105,
+        5,
+        "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
+    ),
+];
 
 const AOXC_RELEASE_NAME: &str = "AOXC Alpha: Genesis V1";
 const TESTNET_FIXTURE_MEMBERS: [(&str, &str, u16, u16, u16, &str); 5] = [
@@ -115,6 +160,7 @@ fn run_cli() -> Result<(), String> {
         "testnet-fixture-init" => cmd_testnet_fixture_init(&args[2..]),
         "load-benchmark" => cmd_load_benchmark(&args[2..]),
         "mainnet-readiness" => cmd_mainnet_readiness(&args[2..]),
+        "mainnet-readiness" => cmd_mainnet_readiness(),
         "key-bootstrap" => cmd_key_bootstrap(&args[2..]),
         "genesis-init" => cmd_genesis_init(&args[2..]),
         "node-bootstrap" => cmd_node_bootstrap(&args[2..]),
@@ -196,6 +242,118 @@ fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
     let enforce = arg_flag(args, "--enforce-official");
     let official_release = is_official_release(&build);
     let output = node_connection_policy_payload(&build);
+fn cmd_build_manifest() -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let official_release = is_official_release(&build);
+
+    let output = serde_json::json!({
+        "artifact": {
+            "name": "aoxcmd",
+            "version": build.semver,
+            "git_commit": build.git_commit,
+            "git_dirty": build.git_dirty,
+            "source_date_epoch": build.source_date_epoch,
+            "build_profile": build.build_profile,
+            "release_channel": build.release_channel,
+            "attestation_hash": build.attestation_hash,
+        },
+        "certificate": {
+            "path": build.cert_path,
+            "sha256": build.cert_sha256,
+            "error": build.cert_error,
+        },
+        "supply_chain_policy": {
+            "official_release": official_release,
+            "requires_embedded_certificate": true,
+            "requires_attestation_hash": true,
+            "accept_unofficial_node_builds": false,
+        }
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    if enforce && !official_release {
+        return Err(
+            "official node policy failed: build is not an official release artifact".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let official_release = is_official_release(&build);
+    let enforce = arg_flag(args, "--enforce-official");
+
+    let output = serde_json::json!({
+        "local_build": {
+            "version": build.semver,
+            "release_channel": build.release_channel,
+            "git_dirty": build.git_dirty,
+            "attestation_hash": build.attestation_hash,
+            "embedded_cert_sha256": build.cert_sha256,
+            "official_release": official_release,
+        },
+        "accepted_remote_policy": {
+            "require_mtls": true,
+            "require_certificate_fingerprint_match": true,
+            "require_attestation_hash_exchange": true,
+            "allow_unofficial_remote_builds": false,
+            "accepted_release_channels": ["stable", "official", "mainnet"],
+        },
+        "operator_guidance": [
+            "Embed a node certificate at build time with AOXC_EMBED_CERT_PATH",
+            "Distribute attestation_hash and certificate fingerprint via a signed release manifest",
+            "Reject ad-hoc local builds for production peering unless explicitly approved",
+        ]
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    if enforce && !official_release {
+        return Err(
+            "official node policy failed: build is not an official release artifact".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let enforce = arg_flag(args, "--enforce-official");
+    let official_release = is_official_release(&build);
+    let output = node_connection_policy_payload(&build);
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    if enforce && !official_release {
+        return Err(
+            "official node policy failed: build is not an official release artifact".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let enforce = arg_flag(args, "--enforce-official");
+    let official_release = is_official_release(&build);
+    let output = node_connection_policy_payload(&build);
 
     println!(
         "{}",
@@ -227,6 +385,14 @@ fn cmd_vision() -> Result<(), String> {
             "security",
             "settlement",
             "treasury"
+        "execution_strategy": "multi-lane model compatible with heterogeneous external networks",
+        "recommended_topology": "thin relay core + five attached functional modules",
+        "functional_modules": [
+            "identity",
+            "asset_treasury",
+            "smart_execution",
+            "interop_bridge",
+            "data_proof"
         ],
         "identity_model": "post-quantum capable key/certificate/passport pipeline",
         "consensus_model": "quorum-based proposer/vote/finalization with explicit rotation",
@@ -409,6 +575,9 @@ fn cmd_module_architecture() -> Result<(), String> {
             "principle": "keep the relay chain thin, neutral, and durable",
             "canonical_modules": relay_module_names,
             "sovereign_roots": sovereign_roots,
+    let output = serde_json::json!({
+        "relay_core": {
+            "principle": "keep the relay chain thin, neutral, and durable",
             "responsibilities": [
                 "finality_ordering",
                 "shared_security",
@@ -450,6 +619,19 @@ fn cmd_module_architecture() -> Result<(), String> {
         ],
         "message_envelope": {
             "fields": envelope_fields
+            "fields": [
+                "sourceModule",
+                "destinationModule",
+                "sourceChainFamily",
+                "targetChainFamily",
+                "nonce",
+                "payloadType",
+                "payloadHash",
+                "proofReference",
+                "feeClass",
+                "expiry",
+                "replayProtectionTag"
+            ]
         },
         "security_boundaries": {
             "relay_core": [
@@ -745,6 +927,13 @@ struct ReadinessCriterion {
     evidence: Vec<String>,
     blocker: bool,
     stretch_goal: bool,
+#[derive(Debug, Clone, Serialize)]
+struct MainnetReadinessControl {
+    name: &'static str,
+    area: &'static str,
+    status: &'static str,
+    weight: u8,
+    rationale: &'static str,
 }
 
 fn cmd_load_benchmark(args: &[String]) -> Result<(), String> {
@@ -889,6 +1078,13 @@ fn cmd_mainnet_readiness(args: &[String]) -> Result<(), String> {
         .criteria
         .iter()
         .map(|criterion| readiness_credit(&criterion.status) * f64::from(criterion.weight))
+fn cmd_mainnet_readiness() -> Result<(), String> {
+    let controls = mainnet_readiness_controls();
+    let total_weight: u32 = controls.iter().map(|control| u32::from(control.weight)).sum();
+    let achieved_weight: u32 = controls
+        .iter()
+        .filter(|control| control.status == "ready")
+        .map(|control| u32::from(control.weight))
         .sum();
     let readiness_percent = if total_weight == 0 {
         0.0
@@ -938,6 +1134,29 @@ fn cmd_mainnet_readiness(args: &[String]) -> Result<(), String> {
             "partial": 0.5,
             "missing": 0.0,
         },
+        (achieved_weight as f64 / total_weight as f64) * 100.0
+    };
+
+    let blockers = controls
+        .iter()
+        .filter(|control| control.status == "missing")
+        .map(|control| format!("{} ({})", control.name, control.area))
+        .collect::<Vec<_>>();
+
+    let partials = controls
+        .iter()
+        .filter(|control| control.status == "partial")
+        .map(|control| format!("{} ({})", control.name, control.area))
+        .collect::<Vec<_>>();
+
+    let output = serde_json::json!({
+        "command": "mainnet-readiness",
+        "readiness_percent": readiness_percent,
+        "grade": readiness_grade(readiness_percent),
+        "summary": readiness_summary(readiness_percent),
+        "controls": controls,
+        "hard_blockers": blockers,
+        "partial_gaps": partials,
         "recommendations": [
             "Complete multi-host p2p tests and sustained peer churn recovery.",
             "Add adversarial partition/byzantine/fault-injection suites.",
@@ -946,6 +1165,7 @@ fn cmd_mainnet_readiness(args: &[String]) -> Result<(), String> {
             "Validate real-world latency and throughput on multiple machines before any mainnet claim."
         ],
         "note": "This is an engineering readiness estimate backed by explicit evidence entries, not a security audit or a guarantee of production safety."
+        "note": "This is an engineering readiness estimate, not a security audit or a guarantee of production safety."
     });
 
     println!(
@@ -1082,6 +1302,72 @@ fn default_readiness_evidence() -> ReadinessEvidenceFile {
             },
         ],
     }
+fn mainnet_readiness_controls() -> Vec<MainnetReadinessControl> {
+    vec![
+        MainnetReadinessControl {
+            name: "Deterministic genesis and test fixture",
+            area: "bootstrap",
+            status: "ready",
+            weight: 10,
+            rationale: "Deterministic local fixture, funded genesis, and reproducible node homes exist.",
+        },
+        MainnetReadinessControl {
+            name: "Single-node block production path",
+            area: "consensus",
+            status: "ready",
+            weight: 10,
+            rationale: "Local block production/finalization path is implemented and covered by tests.",
+        },
+        MainnetReadinessControl {
+            name: "Loopback transport smoke tests",
+            area: "network",
+            status: "ready",
+            weight: 8,
+            rationale: "TCP loopback path and repeated local network probes are available.",
+        },
+        MainnetReadinessControl {
+            name: "Storage smoke path",
+            area: "data",
+            status: "ready",
+            weight: 8,
+            rationale: "Hybrid block storage smoke flow exists for local verification.",
+        },
+        MainnetReadinessControl {
+            name: "Multi-host peer network validation",
+            area: "network",
+            status: "missing",
+            weight: 15,
+            rationale: "No evidence yet of sustained cross-host production-grade p2p validation.",
+        },
+        MainnetReadinessControl {
+            name: "Partition, byzantine, and fault-injection tests",
+            area: "resilience",
+            status: "missing",
+            weight: 15,
+            rationale: "Adversarial recovery evidence is not present in the current repo.",
+        },
+        MainnetReadinessControl {
+            name: "State sync and snapshot recovery",
+            area: "operations",
+            status: "missing",
+            weight: 12,
+            rationale: "State sync/replay/snapshot recovery needs explicit validation before mainnet.",
+        },
+        MainnetReadinessControl {
+            name: "Long-duration soak and SLO telemetry",
+            area: "operations",
+            status: "partial",
+            weight: 12,
+            rationale: "There are runtime/health probes, but no evidence of long-duration audited soak benchmarks.",
+        },
+        MainnetReadinessControl {
+            name: "Official release / attestation controls",
+            area: "supply-chain",
+            status: "partial",
+            weight: 10,
+            rationale: "Build attestation surfaces exist, but deployment discipline still depends on release process.",
+        },
+    ]
 }
 
 fn readiness_grade(percent: f64) -> &'static str {
@@ -2086,6 +2372,18 @@ mod tests {
         load_readiness_evidence, localized_unknown_command, node_connection_policy_payload,
         readiness_credit, readiness_grade, render_launch_script, synthetic_benchmark_payload,
         usage_text, version_payload,
+        detect_language, interop_assessment, is_official_release, localized_unknown_command,
+        mainnet_readiness_controls, node_connection_policy_payload, readiness_grade,
+        render_launch_script, synthetic_benchmark_payload, usage_text, version_payload,
+        node_connection_policy_payload, render_launch_script, usage_text, version_payload,
+        bootstrap_defaults, build_manifest_payload, detect_language, interop_assessment,
+        is_official_release, localized_unknown_command, node_connection_policy_payload, usage_text,
+        version_payload,
+        bootstrap_defaults, detect_language, interop_assessment, is_official_release,
+        localized_unknown_command, usage_text,
+        CliLanguage, ai_control_score, arg_bool_value, assert_mainnet_key_policy,
+        bootstrap_defaults, detect_language, interop_assessment, localized_unknown_command,
+        usage_text,
     };
 
     #[test]
@@ -2307,6 +2605,10 @@ mod tests {
         assert_eq!(readiness_credit("done"), 1.0);
         assert_eq!(readiness_credit("partial"), 0.5);
         assert_eq!(readiness_credit("missing"), 0.0);
+        let controls = mainnet_readiness_controls();
+        assert!(controls.iter().any(|control| control.status == "missing"));
+        assert_eq!(readiness_grade(42.0), "D");
+        assert_eq!(readiness_grade(88.0), "A");
     }
 
     #[test]
@@ -2337,4 +2639,5 @@ mod tests {
         assert_eq!(evidence.version, "aoxc-readiness-evidence-v1");
         assert!(evidence.criteria.iter().any(|criterion| criterion.blocker));
     }
+
 }

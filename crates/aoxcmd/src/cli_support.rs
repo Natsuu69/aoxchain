@@ -79,6 +79,7 @@ Komutlar:
   testnet-fixture-init [--output-dir <dir>] [--chain-num <u32>] [--fund-amount <u128>]
   load-benchmark [--home <dir>] [--rounds <u64>] [--tx-per-block <usize>] [--payload-bytes <usize>] [--network-rounds <u64>] [--timeout-ms <u64>]
   mainnet-readiness [--evidence <file>]
+  mainnet-readiness
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
   genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
@@ -120,6 +121,7 @@ Comandos:
   testnet-fixture-init [--output-dir <dir>] [--chain-num <u32>] [--fund-amount <u128>]
   load-benchmark [--home <dir>] [--rounds <u64>] [--tx-per-block <usize>] [--payload-bytes <usize>] [--network-rounds <u64>] [--timeout-ms <u64>]
   mainnet-readiness [--evidence <file>]
+  mainnet-readiness
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
   genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
@@ -161,6 +163,7 @@ Befehle:
   testnet-fixture-init [--output-dir <dir>] [--chain-num <u32>] [--fund-amount <u128>]
   load-benchmark [--home <dir>] [--rounds <u64>] [--tx-per-block <usize>] [--payload-bytes <usize>] [--network-rounds <u64>] [--timeout-ms <u64>]
   mainnet-readiness [--evidence <file>]
+  mainnet-readiness
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
   genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
@@ -195,6 +198,7 @@ Commands:
   build-manifest
   node-connection-policy [--enforce-official]
   sovereign-core
+
   module-architecture
   compat-matrix
   port-map
@@ -202,6 +206,7 @@ Commands:
   testnet-fixture-init [--output-dir <dir>] [--chain-num <u32>] [--fund-amount <u128>]
   load-benchmark [--home <dir>] [--rounds <u64>] [--tx-per-block <usize>] [--payload-bytes <usize>] [--network-rounds <u64>] [--timeout-ms <u64>]
   mainnet-readiness [--evidence <file>]
+  mainnet-readiness
   key-bootstrap --password <secret> [--home <dir>] [--profile mainnet|testnet] [--allow-mainnet] [--base-dir <dir>] [--name <name>] [--chain <id>] [--role <role>] [--zone <zone>] [--issuer <issuer>] [--validity-secs <u64>]
   genesis-init [--home <dir>] [--path <file>] [--chain-num <u32>] [--block-time <u64>] [--treasury <u128>] [--native-symbol <SYMBOL>] [--native-decimals <u8>] [--settlement-network <name>] [--xlayer-token <0x...>] [--xlayer-main-contract <0x...>] [--xlayer-multisig <0x...>] [--equivalence-mode <text>]
   node-bootstrap
