@@ -225,6 +225,27 @@ fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_node_connection_policy(args: &[String]) -> Result<(), String> {
+    let build = BuildInfo::collect();
+    let enforce = arg_flag(args, "--enforce-official");
+    let official_release = is_official_release(&build);
+    let output = node_connection_policy_payload(&build);
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output)
+            .map_err(|error| format!("JSON_SERIALIZE_ERROR: {error}"))?
+    );
+
+    if enforce && !official_release {
+        return Err(
+            "official node policy failed: build is not an official release artifact".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
 fn cmd_vision() -> Result<(), String> {
     let output = serde_json::json!({
         "release_name": AOXC_RELEASE_NAME,

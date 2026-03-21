@@ -8,3 +8,5 @@ pub mod protocol;
 pub mod receipts;
 pub mod state;
 pub mod transaction; // Keep public export
+
+pub mod native_token;
