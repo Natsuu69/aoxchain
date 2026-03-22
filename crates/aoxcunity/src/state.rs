@@ -61,7 +61,10 @@ impl ConsensusState {
     /// - local head regressions that violate current fork-choice expectations.
     pub fn admit_block(&mut self, block: Block) -> Result<(), ConsensusError> {
         if self.fork_choice.contains(block.hash)
-            || self.blocks.iter().any(|existing| existing.hash == block.hash)
+            || self
+                .blocks
+                .iter()
+                .any(|existing| existing.hash == block.hash)
         {
             return Err(ConsensusError::DuplicateBlock);
         }
@@ -316,12 +319,14 @@ mod tests {
             state_with_validators(vec![validator(1, 10, ValidatorRole::Validator, false)]);
         let block = make_block([0u8; 32], 0, [1u8; 32]);
         state.blocks.push(block.clone());
-        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
-            hash: block.hash,
-            parent: block.header.parent_hash,
-            height: block.header.height,
-            seal: None,
-        });
+        state
+            .fork_choice
+            .insert_block(crate::fork_choice::BlockMeta {
+                hash: block.hash,
+                parent: block.header.parent_hash,
+                height: block.header.height,
+                seal: None,
+            });
 
         let err = state
             .add_vote(Vote {
@@ -345,12 +350,14 @@ mod tests {
             state_with_validators(vec![validator(1, 10, ValidatorRole::Observer, true)]);
         let block = make_block([0u8; 32], 0, [1u8; 32]);
         state.blocks.push(block.clone());
-        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
-            hash: block.hash,
-            parent: block.header.parent_hash,
-            height: block.header.height,
-            seal: None,
-        });
+        state
+            .fork_choice
+            .insert_block(crate::fork_choice::BlockMeta {
+                hash: block.hash,
+                parent: block.header.parent_hash,
+                height: block.header.height,
+                seal: None,
+            });
 
         let err = state
             .add_vote(Vote {
@@ -379,12 +386,14 @@ mod tests {
         let mut state = ConsensusState::new(rotation, QuorumThreshold::new(2, 3).unwrap());
         let block = make_block([0u8; 32], 0, [1u8; 32]);
         state.blocks.push(block.clone());
-        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
-            hash: block.hash,
-            parent: block.header.parent_hash,
-            height: block.header.height,
-            seal: None,
-        });
+        state
+            .fork_choice
+            .insert_block(crate::fork_choice::BlockMeta {
+                hash: block.hash,
+                parent: block.header.parent_hash,
+                height: block.header.height,
+                seal: None,
+            });
 
         state
             .vote_pool
@@ -454,12 +463,14 @@ mod tests {
         state.admit_block(child_b.clone()).unwrap_err();
 
         let alt_hash = [9u8; 32];
-        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
-            hash: alt_hash,
-            parent: genesis.hash,
-            height: 1,
-            seal: None,
-        });
+        state
+            .fork_choice
+            .insert_block(crate::fork_choice::BlockMeta {
+                hash: alt_hash,
+                parent: genesis.hash,
+                height: 1,
+                seal: None,
+            });
         state.blocks.push(crate::block::Block {
             hash: alt_hash,
             ..child_a.clone()

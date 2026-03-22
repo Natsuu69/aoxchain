@@ -92,16 +92,8 @@ mod tests {
 
     #[test]
     fn canonical_finalize_message_bytes_include_seal_material() {
-        let certificate = QuorumCertificate::new(
-            [3u8; 32],
-            5,
-            5,
-            vec![[1u8; 32], [2u8; 32]],
-            2,
-            3,
-            2,
-            3,
-        );
+        let certificate =
+            QuorumCertificate::new([3u8; 32], 5, 5, vec![[1u8; 32], [2u8; 32]], 2, 3, 2, 3);
 
         let seal = BlockSeal {
             block_hash: [3u8; 32],
