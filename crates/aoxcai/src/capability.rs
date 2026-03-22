@@ -187,13 +187,11 @@ impl InvocationPolicy {
         capability: AiCapability,
         action_class: AiActionClass,
     ) -> bool {
-        self.grants
-            .iter()
-            .any(|grant| {
-                grant.zone == zone
-                    && grant.capability == capability
-                    && grant.action_class == action_class
-            })
+        self.grants.iter().any(|grant| {
+            grant.zone == zone
+                && grant.capability == capability
+                && grant.action_class == action_class
+        })
     }
 }
 
