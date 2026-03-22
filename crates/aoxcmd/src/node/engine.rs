@@ -151,9 +151,8 @@ fn snapshot_from_message(message: &ConsensusMessage) -> ConsensusSnapshot {
 }
 
 fn decode_hash32(value: &str, field: &str, code: ErrorCode) -> Result<[u8; 32], AppError> {
-    let bytes = hex::decode(value).map_err(|e| {
-        AppError::with_source(code, format!("Failed to decode {field}"), e)
-    })?;
+    let bytes = hex::decode(value)
+        .map_err(|e| AppError::with_source(code, format!("Failed to decode {field}"), e))?;
 
     if bytes.len() != 32 {
         return Err(AppError::new(code, format!("{field} must be 32 bytes")));
