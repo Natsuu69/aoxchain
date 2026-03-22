@@ -22,16 +22,10 @@ const DEFAULT_NETWORK_ID: u32 = 2626;
 
 /// Produces a single block from the provided transaction payload.
 ///
-/// Execution flow:
-/// 1. Loads persisted state (single source of truth).
-/// 2. Generates deterministic block proposal.
-/// 3. Applies proposal to mutable state.
-/// 4. Persists updated state atomically.
-///
 /// Security guarantees:
-/// - No state mutation occurs before loading canonical snapshot.
-/// - Block derivation is deterministic (no randomness).
-/// - Persistence happens only after successful state transition.
+/// - State is loaded before mutation.
+/// - Block derivation is deterministic.
+/// - Persistence occurs only after successful application.
 pub fn produce_once(tx: &str) -> Result<NodeState, AppError> {
     let mut state = load_state()?;
     state.running = true;
@@ -43,15 +37,7 @@ pub fn produce_once(tx: &str) -> Result<NodeState, AppError> {
     Ok(state)
 }
 
-/// Produces a deterministic sequence of block proposals.
-///
-/// Design properties:
-/// - Each round generates a unique transaction label.
-/// - State evolution is strictly sequential and monotonic.
-/// - Persistence is deferred until all rounds complete.
-///
-/// Performance rationale:
-/// - Minimizes I/O overhead by avoiding per-round writes.
+/// Produces multiple deterministic block rounds.
 pub fn run_rounds(rounds: u64, tx_prefix: &str) -> Result<NodeState, AppError> {
     let mut state = load_state()?;
     state.running = true;
@@ -69,10 +55,9 @@ pub fn run_rounds(rounds: u64, tx_prefix: &str) -> Result<NodeState, AppError> {
 /// Constructs a deterministic block proposal.
 ///
 /// Audit considerations:
-/// - Saturating arithmetic prevents overflow-induced panics.
-/// - Parent hash is strictly validated (no truncation/padding).
-/// - Domain separation is enforced for all hash derivations.
-/// - No implicit trust in external state fields.
+/// - Saturating arithmetic prevents overflow.
+/// - Parent hash strictly validated.
+/// - Domain separation enforced.
 fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
     let height = state.current_height.saturating_add(1);
     let round = state.consensus.last_round.saturating_add(1);
@@ -84,7 +69,6 @@ fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
         ErrorCode::NodeStateInvalid,
     )?;
 
-    // Avoids variable shadowing and ensures semantic clarity
     let proposer_key = derive_digest32("AOXC-CMD-PROPOSER", tx.as_bytes());
 
     let lane_commitment = LaneCommitment {
@@ -117,12 +101,7 @@ fn build_block_for_tx(state: &NodeState, tx: &str) -> Result<Block, AppError> {
         })
 }
 
-/// Applies a block proposal to node state.
-///
-/// Integrity guarantees:
-/// - Height is sourced directly from block header.
-/// - Counters use saturating arithmetic.
-/// - Snapshot is rebuilt from canonical message representation.
+/// Applies block to state safely.
 fn apply_block_proposal(state: &mut NodeState, tx: &str, block: &Block) {
     let message = ConsensusMessage::BlockProposal {
         block: block.clone(),
@@ -135,12 +114,7 @@ fn apply_block_proposal(state: &mut NodeState, tx: &str, block: &Block) {
     state.touch();
 }
 
-/// Converts consensus messages into compact snapshot format.
-///
-/// Design guarantees:
-/// - Ensures uniform state reconstruction.
-/// - Eliminates dependency on transient message formats.
-/// - Provides deterministic fallback for incomplete message types.
+/// Snapshot builder.
 fn snapshot_from_message(message: &ConsensusMessage) -> ConsensusSnapshot {
     match message {
         ConsensusMessage::BlockProposal { block } => ConsensusSnapshot {
@@ -165,8 +139,8 @@ fn snapshot_from_message(message: &ConsensusMessage) -> ConsensusSnapshot {
         },
         ConsensusMessage::Finalize { seal } => ConsensusSnapshot {
             network_id: DEFAULT_NETWORK_ID,
-            last_parent_hash_hex: hex::encode([0u8; 32]),
             last_block_hash_hex: hex::encode(seal.block_hash),
+            last_parent_hash_hex: hex::encode([0u8; 32]),
             last_proposer_hex: hex::encode([0u8; 32]),
             last_round: seal.finalized_round,
             last_timestamp_unix: 0,
@@ -176,47 +150,27 @@ fn snapshot_from_message(message: &ConsensusMessage) -> ConsensusSnapshot {
     }
 }
 
-/// Strict 32-byte hex decoder.
-///
-/// Security guarantees:
-/// - Rejects malformed hex input.
-/// - Enforces exact 32-byte length.
-/// - Prevents silent truncation or padding.
 fn decode_hash32(value: &str, field: &str, code: ErrorCode) -> Result<[u8; 32], AppError> {
-    let bytes = hex::decode(value).map_err(|error| {
-        AppError::with_source(code, format!("Failed to decode {field} as hex"), error)
+    let bytes = hex::decode(value).map_err(|e| {
+        AppError::with_source(code, format!("Failed to decode {field}"), e)
     })?;
 
     if bytes.len() != 32 {
-        return Err(AppError::new(
-            code,
-            format!("{field} must decode to exactly 32 bytes"),
-        ));
+        return Err(AppError::new(code, format!("{field} must be 32 bytes")));
     }
 
-    let mut hash = [0u8; 32];
-    hash.copy_from_slice(&bytes);
-    Ok(hash)
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes);
+    Ok(out)
 }
 
-/// Domain-separated SHA3-256 digest.
-///
-/// Cryptographic guarantees:
-/// - Prevents cross-domain collision.
-/// - Deterministic and side-effect free.
-/// - Minimal attack surface.
 fn derive_digest32(domain: &str, payload: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha3_256::new();
-    hasher.update(domain.as_bytes());
-    hasher.update(payload);
-    hasher.finalize().into()
+    let mut h = Sha3_256::new();
+    h.update(domain.as_bytes());
+    h.update(payload);
+    h.finalize().into()
 }
 
-/// Returns a non-zero UNIX timestamp.
-///
-/// Safety guarantees:
-/// - Never returns 0.
-/// - Handles system clock anomalies safely.
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
