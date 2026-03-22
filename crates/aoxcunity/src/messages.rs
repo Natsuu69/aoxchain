@@ -6,7 +6,15 @@ use crate::vote::Vote;
 
 /// Canonical consensus message surface.
 ///
-/// Network transports remain free to wrap these messages as needed.
+/// # Design Intent
+/// This enum defines the transport-facing message classes exchanged by the
+/// consensus subsystem. The message model remains intentionally compact and
+/// consensus-oriented.
+///
+/// # Security Note
+/// These messages are canonical protocol artifacts. Network transports may wrap
+/// them in authenticated envelopes, but they must not alter the deterministic
+/// payload semantics defined here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsensusMessage {
     BlockProposal { block: Block },
@@ -17,9 +25,20 @@ pub enum ConsensusMessage {
 impl ConsensusMessage {
     /// Returns deterministic bytes for authenticated transport binding.
     ///
-    /// This method does not perform signature verification. It provides the
-    /// canonical payload foundation required for future authenticated network
-    /// envelopes without relying on text serialization.
+    /// # Security Rationale
+    /// This method provides the canonical byte representation required for
+    /// authenticated transport and future signature binding. It intentionally
+    /// avoids text-based serialization in order to prevent ambiguity, encoding
+    /// drift, or implementation-dependent payload variation.
+    ///
+    /// # Encoding Rules
+    /// - The first byte is a stable message discriminator.
+    /// - All numeric fields use little-endian encoding.
+    /// - Hash-like fields are appended in fixed-width canonical order.
+    /// - Finalization messages bind both attestation material and certificate
+    ///   identity so that transport authentication commits to the full
+    ///   finality artifact.
+    #[must_use]
     pub fn canonical_bytes(&self) -> Vec<u8> {
         match self {
             Self::BlockProposal { block } => {
@@ -29,17 +48,19 @@ impl ConsensusMessage {
                 bytes
             }
             Self::Vote(vote) => {
-                let mut bytes = Vec::with_capacity(1 + vote.signing_bytes().len());
+                let signing_bytes = vote.signing_bytes();
+                let mut bytes = Vec::with_capacity(1 + signing_bytes.len());
                 bytes.push(1);
-                bytes.extend_from_slice(&vote.signing_bytes());
+                bytes.extend_from_slice(&signing_bytes);
                 bytes
             }
             Self::Finalize { seal } => {
-                let mut bytes = Vec::with_capacity(1 + 32 + 8 + 32);
+                let mut bytes = Vec::with_capacity(1 + 32 + 8 + 32 + 32);
                 bytes.push(2);
                 bytes.extend_from_slice(&seal.block_hash);
                 bytes.extend_from_slice(&seal.finalized_round.to_le_bytes());
                 bytes.extend_from_slice(&seal.attestation_root);
+                bytes.extend_from_slice(&seal.certificate.certificate_hash);
                 bytes
             }
         }
@@ -48,7 +69,7 @@ impl ConsensusMessage {
 
 #[cfg(test)]
 mod tests {
-    use crate::seal::BlockSeal;
+    use crate::seal::{BlockSeal, QuorumCertificate};
     use crate::vote::{Vote, VoteKind};
 
     use super::ConsensusMessage;
@@ -71,14 +92,28 @@ mod tests {
 
     #[test]
     fn canonical_finalize_message_bytes_include_seal_material() {
+        let certificate = QuorumCertificate::new(
+            [3u8; 32],
+            5,
+            5,
+            vec![[1u8; 32], [2u8; 32]],
+            2,
+            3,
+            2,
+            3,
+        );
+
         let seal = BlockSeal {
             block_hash: [3u8; 32],
             finalized_round: 5,
             attestation_root: [4u8; 32],
+            certificate,
         };
 
+        let certificate_hash = seal.certificate.certificate_hash;
         let bytes = ConsensusMessage::Finalize { seal }.canonical_bytes();
 
-        assert!(bytes.ends_with(&[4u8; 32]));
+        assert!(bytes.windows(32).any(|window| window == [4u8; 32]));
+        assert!(bytes.windows(32).any(|window| window == certificate_hash));
     }
 }
