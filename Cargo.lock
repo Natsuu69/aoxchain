@@ -116,6 +116,7 @@ name = "aoxcai"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "httpmock",
  "reqwest",
  "serde",
