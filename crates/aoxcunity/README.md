@@ -13,6 +13,8 @@
 - `proposer.rs`
 - `seal.rs`
 - `state.rs`
+- `constitutional.rs`
+- `kernel.rs`
 
 ## Operational Notes
 
