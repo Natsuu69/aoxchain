@@ -13,6 +13,8 @@
 - `proposer.rs`
 - `seal.rs`
 - `state.rs`
+- `constitutional.rs`
+- `kernel.rs`
 
 ## Operational Notes
 
@@ -25,6 +27,25 @@
 ```bash
 cargo check -p aoxcunity && cargo test -p aoxcunity
 ```
+
+
+## AOXC-native Consensus Direction
+
+For an AOXC-specific consensus design that goes beyond standard BFT clones, see
+[`AOXC_COVENANT_CONSENSUS.md`](./AOXC_COVENANT_CONSENSUS.md).
+
+That document proposes **AOXC Covenant Consensus (ACC)** built around:
+
+- deterministic kernel transitions,
+- legitimacy certificates,
+- continuity/timeout certificates,
+- finality via a composite **Covenant Seal** rather than a single generic QC.
+
+## Integration Contract
+
+- Verified artifacts are expected to be produced outside the kernel-facing state machine.
+- `ConsensusState` remains the execution-plane admission/finalization holder.
+- Constitutional artifacts are composed on top of execution finality instead of being implicitly folded into `ConsensusState`.
 
 ## Related Components
 
