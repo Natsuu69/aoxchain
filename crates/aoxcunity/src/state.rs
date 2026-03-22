@@ -11,12 +11,17 @@ use crate::vote_pool::VotePool;
 
 /// In-memory consensus state container.
 ///
-/// Responsibilities:
-/// - stores blocks admitted into local consensus view,
-/// - tracks fork-choice head,
-/// - admits votes,
-/// - evaluates commit quorum,
-/// - marks finalized blocks when quorum is reached.
+/// # Responsibilities
+/// - stores blocks admitted into the local consensus view,
+/// - maintains fork-choice metadata,
+/// - admits and validates votes,
+/// - evaluates quorum attainment,
+/// - builds finality artifacts when quorum conditions are satisfied.
+///
+/// # Security Note
+/// This structure is intentionally deterministic and validation-oriented.
+/// It does not provide durable persistence in this phase and therefore must not
+/// be treated as a crash-recovery authority source.
 #[derive(Debug, Clone)]
 pub struct ConsensusState {
     pub fork_choice: ForkChoice,
@@ -28,6 +33,7 @@ pub struct ConsensusState {
 }
 
 impl ConsensusState {
+    #[must_use]
     pub fn new(rotation: ValidatorRotation, quorum: QuorumThreshold) -> Self {
         Self {
             fork_choice: ForkChoice::new(),
@@ -41,15 +47,21 @@ impl ConsensusState {
 
     /// Admits a block into local consensus state.
     ///
-    /// Genesis policy in this phase is explicit: only height `0` or `1` may
-    /// use the zero parent hash. Every non-genesis block must reference an
-    /// existing parent and must advance height by exactly one.
+    /// # Genesis Policy
+    /// Only height `0` or `1` may use the zero parent hash under the explicit
+    /// genesis rule. Every non-genesis block must reference an existing parent
+    /// and must advance height by exactly one.
+    ///
+    /// # Security Semantics
+    /// This method rejects:
+    /// - duplicate block hashes,
+    /// - invalid zero-parent usage,
+    /// - unknown parents,
+    /// - parent/child height discontinuity,
+    /// - local head regressions that violate current fork-choice expectations.
     pub fn admit_block(&mut self, block: Block) -> Result<(), ConsensusError> {
         if self.fork_choice.contains(block.hash)
-            || self
-                .blocks
-                .iter()
-                .any(|existing| existing.hash == block.hash)
+            || self.blocks.iter().any(|existing| existing.hash == block.hash)
         {
             return Err(ConsensusError::DuplicateBlock);
         }
@@ -96,6 +108,16 @@ impl ConsensusState {
         Ok(())
     }
 
+    /// Admits a vote into local consensus state after eligibility validation.
+    ///
+    /// # Security Semantics
+    /// Votes are rejected when:
+    /// - the target block is unknown,
+    /// - the voter is unknown,
+    /// - the voter is inactive,
+    /// - the voter is not eligible to vote.
+    ///
+    /// Duplicate and equivocating votes are further rejected by `VotePool`.
     pub fn add_vote(&mut self, vote: Vote) -> Result<(), ConsensusError> {
         if !self.fork_choice.contains(vote.block_hash) {
             return Err(ConsensusError::VoteForUnknownBlock);
@@ -117,6 +139,9 @@ impl ConsensusState {
         self.vote_pool.add_vote(vote)
     }
 
+    /// Returns observed voting power for a block and vote kind using only
+    /// active, eligible voting participants.
+    #[must_use]
     pub fn observed_voting_power(&self, block_hash: [u8; 32], kind: VoteKind) -> u64 {
         self.vote_pool
             .votes_for_block(block_hash)
@@ -126,12 +151,20 @@ impl ConsensusState {
             .sum()
     }
 
+    /// Returns `true` if quorum is reached for the specified block and vote kind.
+    #[must_use]
     pub fn has_quorum(&self, block_hash: [u8; 32], kind: VoteKind) -> bool {
         let observed = self.observed_voting_power(block_hash, kind);
         let total = self.rotation.total_voting_power();
         self.quorum.is_reached(observed, total)
     }
 
+    /// Attempts to finalize a block by constructing a quorum certificate and
+    /// marking the block finalized in fork choice.
+    ///
+    /// # Security Semantics
+    /// Finalization succeeds only when a valid quorum certificate can be built
+    /// from eligible commit votes matching the exact block, height, and round.
     pub fn try_finalize(
         &mut self,
         block_hash: [u8; 32],
@@ -152,6 +185,14 @@ impl ConsensusState {
         }
     }
 
+    /// Builds a deterministic quorum certificate from eligible commit votes.
+    ///
+    /// # Certificate Rules
+    /// - only `Commit` votes participate,
+    /// - vote height must match the target block height,
+    /// - vote round must match the requested finalization round,
+    /// - only eligible validator voting power contributes,
+    /// - signer ordering is canonicalized.
     fn build_quorum_certificate(
         &self,
         block_hash: [u8; 32],
@@ -161,6 +202,7 @@ impl ConsensusState {
 
         let mut signers = Vec::new();
         let mut observed_voting_power = 0u64;
+
         for vote in self.vote_pool.votes_for_block(block_hash) {
             if vote.kind != VoteKind::Commit {
                 continue;
@@ -168,6 +210,7 @@ impl ConsensusState {
             if vote.height != block.header.height || vote.round != finalized_round {
                 continue;
             }
+
             let voting_power = self.rotation.eligible_voting_power_of(vote.voter)?;
             signers.push(vote.voter);
             observed_voting_power = observed_voting_power.saturating_add(voting_power);
@@ -196,6 +239,7 @@ impl ConsensusState {
         ))
     }
 
+    #[must_use]
     pub fn proposer_for_height(&self, height: u64) -> Option<ValidatorId> {
         self.rotation.proposer(height)
     }
@@ -272,14 +316,12 @@ mod tests {
             state_with_validators(vec![validator(1, 10, ValidatorRole::Validator, false)]);
         let block = make_block([0u8; 32], 0, [1u8; 32]);
         state.blocks.push(block.clone());
-        state
-            .fork_choice
-            .insert_block(crate::fork_choice::BlockMeta {
-                hash: block.hash,
-                parent: block.header.parent_hash,
-                height: block.header.height,
-                seal: None,
-            });
+        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
+            hash: block.hash,
+            parent: block.header.parent_hash,
+            height: block.header.height,
+            seal: None,
+        });
 
         let err = state
             .add_vote(Vote {
@@ -303,14 +345,12 @@ mod tests {
             state_with_validators(vec![validator(1, 10, ValidatorRole::Observer, true)]);
         let block = make_block([0u8; 32], 0, [1u8; 32]);
         state.blocks.push(block.clone());
-        state
-            .fork_choice
-            .insert_block(crate::fork_choice::BlockMeta {
-                hash: block.hash,
-                parent: block.header.parent_hash,
-                height: block.header.height,
-                seal: None,
-            });
+        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
+            hash: block.hash,
+            parent: block.header.parent_hash,
+            height: block.header.height,
+            seal: None,
+        });
 
         let err = state
             .add_vote(Vote {
@@ -339,14 +379,12 @@ mod tests {
         let mut state = ConsensusState::new(rotation, QuorumThreshold::new(2, 3).unwrap());
         let block = make_block([0u8; 32], 0, [1u8; 32]);
         state.blocks.push(block.clone());
-        state
-            .fork_choice
-            .insert_block(crate::fork_choice::BlockMeta {
-                hash: block.hash,
-                parent: block.header.parent_hash,
-                height: block.header.height,
-                seal: None,
-            });
+        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
+            hash: block.hash,
+            parent: block.header.parent_hash,
+            height: block.header.height,
+            seal: None,
+        });
 
         state
             .vote_pool
@@ -411,17 +449,17 @@ mod tests {
         let genesis = admit_genesis(&mut state, [1u8; 32]);
         let child_a = make_block(genesis.hash, 1, [1u8; 32]);
         let child_b = make_block(genesis.hash, 1, [1u8; 32]);
+
         state.admit_block(child_a.clone()).unwrap();
         state.admit_block(child_b.clone()).unwrap_err();
+
         let alt_hash = [9u8; 32];
-        state
-            .fork_choice
-            .insert_block(crate::fork_choice::BlockMeta {
-                hash: alt_hash,
-                parent: genesis.hash,
-                height: 1,
-                seal: None,
-            });
+        state.fork_choice.insert_block(crate::fork_choice::BlockMeta {
+            hash: alt_hash,
+            parent: genesis.hash,
+            height: 1,
+            seal: None,
+        });
         state.blocks.push(crate::block::Block {
             hash: alt_hash,
             ..child_a.clone()
@@ -436,6 +474,7 @@ mod tests {
                 kind: VoteKind::Prepare,
             })
             .unwrap();
+
         let err = state
             .add_vote(Vote {
                 voter: [1u8; 32],
