@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
 use crate::block::Block;
-use crate::constitutional::{
-    ConstitutionalSeal, ContinuityCertificate, ExecutionCertificate, LegitimacyCertificate,
-};
 use crate::error::ConsensusError;
 use crate::fork_choice::{BlockMeta, ForkChoice};
 use crate::quorum::QuorumThreshold;
@@ -327,7 +324,7 @@ impl ConsensusState {
 #[cfg(test)]
 mod tests {
     use crate::block::{BlockBody, BlockBuilder};
-    use crate::constitutional::{ContinuityCertificate, LegitimacyCertificate};
+    //use crate::constitutional::{ContinuityCertificate, LegitimacyCertificate};
     use crate::error::ConsensusError;
     use crate::quorum::QuorumThreshold;
     use crate::rotation::ValidatorRotation;
