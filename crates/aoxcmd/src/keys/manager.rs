@@ -17,6 +17,17 @@ pub fn bootstrap_operator_key(
     Ok(material)
 }
 
+pub fn rotate_operator_key(
+    name: &str,
+    profile: &str,
+    password: &str,
+) -> Result<KeyMaterialSummary, AppError> {
+    let previous = load_operator_key()?;
+    let rotated = KeyMaterial::rotate_from_existing(&previous, name, profile, password)?;
+    persist_operator_key(&rotated)?;
+    rotated.summary()
+}
+
 pub fn operator_fingerprint() -> Result<String, AppError> {
     Ok(load_operator_key()?.fingerprint().to_string())
 }
