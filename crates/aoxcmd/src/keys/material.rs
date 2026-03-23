@@ -3,6 +3,7 @@ use aoxcore::identity::{
     key_bundle::{CryptoProfile, NodeKeyBundleV1},
     key_engine::KeyEngine,
     keyfile::{encrypt_key_to_envelope, KeyfileEnvelope},
+    passport::Passport,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
