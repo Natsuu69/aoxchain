@@ -8,6 +8,7 @@ use crate::{
         bootstrap_operator_key, consensus_public_key_hex, operator_fingerprint, verify_operator_key,
     },
 };
+use aoxcore::identity::key_bundle::NodeKeyOperationalState;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
