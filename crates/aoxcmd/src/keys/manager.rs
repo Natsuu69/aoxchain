@@ -5,6 +5,7 @@ use crate::{
         material::{KeyMaterial, KeyMaterialSummary},
     },
 };
+use aoxcore::identity::key_bundle::NodeKeyOperationalState;
 
 pub fn bootstrap_operator_key(
     name: &str,
