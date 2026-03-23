@@ -38,6 +38,7 @@ struct Readiness {
     remaining_weight: u8,
     verdict: &'static str,
     blockers: Vec<String>,
+    remediation_plan: Vec<String>,
     checks: Vec<ReadinessCheck>,
 }
 
@@ -97,6 +98,18 @@ pub fn cmd_mainnet_readiness(args: &[String]) -> Result<(), AppError> {
         genesis_ok,
         node_ok,
     );
+
+    if has_flag(args, "--enforce") && readiness.verdict != "candidate" {
+        return Err(AppError::new(
+            ErrorCode::PolicyGateFailed,
+            format!(
+                "Mainnet readiness enforcement failed at score {} with blockers: {}",
+                readiness.readiness_score,
+                readiness.blockers.join(" | ")
+            ),
+        ));
+    }
+
     emit_serialized(&readiness, output_format(args))
 }
 
@@ -287,6 +300,7 @@ fn readiness_from_checks(profile: String, checks: Vec<ReadinessCheck>) -> Readin
         .filter(|check| !check.passed)
         .map(|check| format!("{}: {}", check.name, check.detail))
         .collect::<Vec<_>>();
+    let remediation_plan = remediation_plan(&checks);
 
     Readiness {
         profile,
@@ -309,8 +323,71 @@ fn readiness_from_checks(profile: String, checks: Vec<ReadinessCheck>) -> Readin
             "not-ready"
         },
         blockers,
+        remediation_plan,
         checks,
     }
+}
+
+fn remediation_plan(checks: &[ReadinessCheck]) -> Vec<String> {
+    let mut plan = Vec::new();
+
+    for check in checks.iter().filter(|check| !check.passed) {
+        let step = match check.name {
+            "config-valid" => {
+                "Run `aoxc config-validate` and fix the operator settings file before promotion."
+            }
+            "mainnet-profile" => {
+                "Run `aoxc production-bootstrap --profile mainnet --password <value>` or `aoxc config-init --profile mainnet --json-logs`."
+            }
+            "official-peers" => {
+                "Re-enable curated peer enforcement in the operator settings before joining production."
+            }
+            "telemetry-metrics" => {
+                "Keep Prometheus telemetry enabled so production SLOs and alerts remain actionable."
+            }
+            "structured-logging" => {
+                "Enable JSON logging to preserve audit-quality operator trails and SIEM ingestion."
+            }
+            "genesis-present" => {
+                "Materialize genesis with `aoxc genesis-init` or re-run `aoxc production-bootstrap`."
+            }
+            "node-state-present" => {
+                "Initialize runtime state with `aoxc node-bootstrap` or re-run `aoxc production-bootstrap`."
+            }
+            "operator-key-active" => {
+                "Bootstrap or rotate operator keys with `aoxc key-bootstrap --profile mainnet --password <value>`."
+            }
+            "profile-baseline-parity" => {
+                "Run `aoxc profile-baseline --enforce` and align embedded mainnet/testnet configs before promotion."
+            }
+            "release-evidence" => {
+                "Regenerate release evidence under `artifacts/release-evidence/` before promotion."
+            }
+            "production-closure" => {
+                "Refresh production closure artifacts under `artifacts/network-production-closure/`."
+            }
+            "compatibility-matrix" => {
+                "Publish a fresh compatibility matrix for the candidate release."
+            }
+            "provenance-attestation" => {
+                "Attach provenance attestation evidence before release sign-off."
+            }
+            _ => continue,
+        };
+
+        if !plan.iter().any(|existing| existing == step) {
+            plan.push(step.to_string());
+        }
+    }
+
+    if plan.is_empty() {
+        plan.push(
+            "Candidate is at 100%; keep running `aoxc mainnet-readiness --enforce --format json` in CI to prevent regressions."
+                .to_string(),
+        );
+    }
+
+    plan
 }
 
 fn has_release_evidence(dir: &Path) -> bool {
@@ -676,6 +753,8 @@ mod tests {
         assert_eq!(readiness.readiness_score, 100);
         assert_eq!(readiness.verdict, "candidate");
         assert!(readiness.blockers.is_empty());
+        assert_eq!(readiness.remediation_plan.len(), 1);
+        assert!(readiness.remediation_plan[0].contains("100%"));
     }
 
     #[test]
