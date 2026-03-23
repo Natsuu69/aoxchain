@@ -107,6 +107,7 @@ function App() {
             sonra AOXHub desktop içinde görünür bir launch akışı kurmak gerekiyor.
             Bu arayüz, mevcut repo durumunu ürün diline çeviren başlangıç panelidir.
           </p>
+          {error ? <p className="callout warning">Fallback mode: {error}</p> : null}
         </div>
 
         <div className="hero-summary">
