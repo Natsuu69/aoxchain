@@ -1,8 +1,6 @@
-# AOXChain Testnet + Mainnet Hizalı 9 Etap Programı + Stage 0 Altyapı Tamamlama Planı (TR)
+# AOXChain Testnet + Mainnet Hizalı 9 Etap Programı (TR)
 
 Bu belge, AOXChain için **testnet ve mainnet hazırlığını ayrı yol haritaları olarak değil, tek hizalı yürütme programı olarak** tanımlar.
-
-Bu revizyonda programın önüne zorunlu bir **Stage 0 / Başlangıç Bazı** eklenmiştir. Kullanılacak başlangıç etiketi: **`v0.1.1-alpha`**. Bu baseline tamamlanmadan Etap 1 başlamaz.
 
 Amaç sadece bir testnet açmak değildir. Amaç, testnet üzerinde doğrulanan her kritik kabiliyetin kontrollü biçimde mainnet hazırlık kapısına bağlanmasıdır. Böylece:
 
@@ -57,57 +55,9 @@ Her etap için aşağıdakiler zorunludur:
 - açık risk listesi,
 - bir sonraki etabı unblock eden çıktı.
 
-### 1.5 Stage 0 zorunlu başlangıç kuralı
-Etap 1'e geçmeden önce aşağıdaki alanlar **%100 tamamlanmış** kabul edilmelidir:
-
-- docs yapısı eksiksiz ve birbiriyle tutarlı olmalı,
-- `SUMMARY.md` ve mdBook gezinmesi eksiksiz olmalı,
-- sürüm etiketi ve başlangıç release notu tanımlanmış olmalı,
-- eksik altyapı dosyaları, klasörleri, örnek config'leri ve placeholder yerine gerçek içerikler tamamlanmış olmalı,
-- hangi dosyanın neden var olduğu, nerede bulunduğu ve kim tarafından sahiplenildiği yazılmış olmalı.
-
-Bu programda bu başlangıç bazı **`v0.1.1-alpha`** olarak adlandırılır. Amaç: **altyapı %100**.
-
 ---
 
-## 2. Program sürümü ve etap özeti
-
-### Başlangıç baseline sürümü
-- **Program başlangıç sürümü:** `v0.1.1-alpha`
-- **Baseline adı:** Stage 0 / Altyapı %100 Tamamlama Bazı
-- **Kural:** Stage 0 kapanmadan Etap 1 başlamaz.
-
-### Stage 0 — Etap 1 öncesi zorunlu baz
-
-#### Hedef
-Belge, mdBook, sürümleme ve eksik altyapı dosyaları tarafında boşluk bırakmadan tek bir başlangıç tabanı oluşturmak.
-
-#### Testnet çıktısı
-- testnet için gerekli tüm temel docs, config örnekleri, çalışma akışı açıklamaları ve klasör yerleri açık biçimde yazılır,
-- eksik veya placeholder kalan markdown/dosya referansları temizlenir,
-- operatör bir dosyanın ne işe yaradığını belgeye bakarak anlayabilir.
-
-#### Mainnet çıktısı
-- aynı temel yapı mainnet hazırlık belgelerinde de tam ve tutarlı hale gelir,
-- sürüm etiketi, başlangıç release notu ve belge sahipliği netleştirilir,
-- dokümantasyon ve release dili, launch gate'e bağlanabilecek kadar düzenli hale getirilir.
-
-#### İş kalemleri
-- `docs/src/` altında eksik veya belirsiz başlıkları tamamla,
-- `SUMMARY.md` içindeki gezinmeyi eksiksiz hale getir,
-- mdBook kırık link, eksik sayfa ve yanlış başlıklarını temizle,
-- `v0.1.1-alpha` için başlangıç kapsam notu yaz,
-- eksik altyapı dosyaları için gerçek içerik üret veya açıkça neden eksik olduğunu backlog'a bağla,
-- config / fixture / artifact klasör yerlerini belge üstünde tek tek yaz,
-- sahiplik matrisi oluştur: docs owner, release owner, infra owner, network owner.
-
-#### Exit criteria
-- docs ve mdBook tarafında bilinen kırık gezinme veya eksik sayfa kalmaz,
-- başlangıç sürümü `v0.1.1-alpha` olarak kayda geçer,
-- eksik altyapı dosyaları listelenmiş, yerleştirilmiş veya resmî backlog'a bağlanmış olur,
-- “amacımız altyapı %100” ifadesi somut checklist'e çevrilmiş olur.
-
----
+## 2. Etap özeti
 
 | Etap | Başlık | Testnet odağı | Mainnet hizası |
 |---|---|---|---|
@@ -121,6 +71,7 @@ Belge, mdBook, sürümleme ve eksik altyapı dosyaları tarafında boşluk bıra
 | 8 | Release, upgrade ve provenance | testnet upgrade provası | signed release + migration + rollback |
 | 9 | Launch gate ve kademeli açılış | public testnet launch kararı | controlled mainnet launch kararı |
 
+---
 
 ## 3. Etap 1 — Program ve mimari hizalama
 
