@@ -4,7 +4,10 @@ use crate::{
     config::loader::{init_default, load, load_or_init},
     data_home::{ensure_layout, read_file, resolve_home, write_file},
     error::{AppError, ErrorCode},
-    keys::manager::{bootstrap_operator_key, operator_fingerprint, verify_operator_key},
+    keys::manager::{
+        bootstrap_operator_key, consensus_public_key_hex, inspect_operator_key,
+        operator_fingerprint, verify_operator_key,
+    },
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -91,6 +94,11 @@ pub fn cmd_keys_show_fingerprint(args: &[String]) -> Result<(), AppError> {
     )
 }
 
+pub fn cmd_keys_inspect(args: &[String]) -> Result<(), AppError> {
+    let summary = inspect_operator_key()?;
+    emit_serialized(&summary, output_format(args))
+}
+
 pub fn cmd_keys_verify(args: &[String]) -> Result<(), AppError> {
     let password = arg_value(args, "--password");
     verify_operator_key(password.as_deref())?;
@@ -133,7 +141,7 @@ pub fn cmd_genesis_init(args: &[String]) -> Result<(), AppError> {
         .unwrap_or_else(|| "1000000000000".to_string())
         .parse::<u64>()
         .map_err(|_| AppError::new(ErrorCode::UsageInvalidArguments, "Invalid --treasury value"))?;
-    let validator_key = operator_fingerprint().unwrap_or_else(|_| "unbootstrapped".to_string());
+    let validator_key = consensus_public_key_hex().unwrap_or_else(|_| "unbootstrapped".to_string());
 
     let genesis = GenesisDocument {
         network_name: "AOXC Local Genesis".to_string(),
