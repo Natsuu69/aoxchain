@@ -1,414 +1,419 @@
-# AOXChain Tek Etap Tamamlama Programı (TR)
+# AOXChain Testnet + Mainnet Hizalı 9 Etap Programı (TR)
 
-Bu belge, AOXChain için önceki çok-etaplı yaklaşımı sadeleştirip **tek etapta tamamlama programı** olarak yeniden tanımlar.
+Bu belge, AOXChain için **testnet ve mainnet hazırlığını ayrı yol haritaları olarak değil, tek hizalı yürütme programı olarak** tanımlar.
 
-Yeni karar şudur:
+Amaç sadece bir testnet açmak değildir. Amaç, testnet üzerinde doğrulanan her kritik kabiliyetin kontrollü biçimde mainnet hazırlık kapısına bağlanmasıdır. Böylece:
 
-- ayrı ayrı etaplar halinde ilerlemek yerine,
-- `v0.1.1-alpha` başlangıç bazını alıp,
-- dokümantasyon, mdBook, sürümleme, altyapı dosyaları, network, consensus, recovery, RPC security, observability, release ve launch gate alanlarını
-- **tek büyük kapanış etabı** içinde eksiksiz hale getirmek.
+- testnet, “demo ortamı” olarak kalmaz,
+- mainnet, test edilmemiş varsayımlarla başlatılmaz,
+- her etap için aynı anda **testnet çıkışı** ve **mainnet karşılığı** tanımlanır,
+- teknik ekip, operasyon ekibi ve güvenlik inceleme akışı aynı program içinde hizalanır.
 
-Bu yüzden bu belgedeki ana hedef şudur:
+Bu programın temel dayanakları şunlardır:
 
-> **Amaç: altyapı %100.**
-
-Bu ifade şu anlama gelir:
-
-1. eksik docs kalmaması,
-2. eksik mdBook gezinti veya kırık referans kalmaması,
-3. eksik altyapı dosyası / klasör / örnek config / artifact yeri belirsizliği kalmaması,
-4. testnet ile mainnet arasındaki farkların yazılı ve ölçülebilir olması,
-5. testnet ve mainnet için gerekli teknik kapıların aynı program altında kapanması,
-6. release, rollback, upgrade, security ve operasyon konularının belge dışına taşmaması.
+- gerçek ağ için gerekli zorunlu kapılar,
+- audit-readiness ve operasyonel sertleştirme gereksinimleri,
+- consensus kernel için testnet öncesi ve mainnet öncesi kapanış maddeleri,
+- readiness evidence modelinde blocker olarak tanımlanan alanlar.
 
 ---
 
-## 1. Program sürümü
+## 1. Programın yönetim ilkeleri
 
-### Başlangıç etiketi
-- **Program başlangıç sürümü:** `v0.1.1-alpha`
-- **Program tipi:** tek etap tamamlama
-- **Program hedefi:** testnet + mainnet hizalı altyapı kapanışı
-- **Başlangıç ilkesi:** parça parça ilerleme değil, kapanış odaklı tamamlama
+### 1.1 Tek backlog, çift hedef
+Her iş kalemi tek backlog içinde tutulur; ancak her kalem için iki ayrı sonuç alanı yazılır:
 
-### Sürüm mantığı
-Bu belgede `v0.1.1-alpha` şu amaçla kullanılır:
+1. **Testnet Outcome**
+2. **Mainnet Outcome**
 
-- eksiklerin görünür hale getirilmesi,
-- başlangıç kapsamının dondurulması,
-- tamamlanacak dosya/klasör/doc/env/config alanlarının sabitlenmesi,
-- tek etap sonunda hangi deliverable'ların “tam” sayılacağının ölçülmesi.
+Örnek:
+- Testnet outcome: 5 node ayrı hostlarda propagation raporu üretildi.
+- Mainnet outcome: aynı ölçüm hattı release gate ve SLO eşiğine bağlandı.
 
-Tek etap tamamlanmadan bir sonraki program sürümüne geçilmez.
+### 1.2 “Testnet geçti” demek “mainnet hazır” demek değildir
+Her etapta testnet kabul kriteri ile mainnet kabul kriteri ayrı yazılmalıdır.
 
----
+- Testnet kabulü: özelliğin gerçek ağda çalıştığının kanıtı.
+- Mainnet kabulü: özelliğin güvenlik, operasyon ve rollback gereksinimleriyle birlikte sürdürülebilir olduğunun kanıtı.
 
-## 2. Neden tek etap?
+### 1.3 Blocker mantığı
+Aşağıdaki alanlar blocker olarak ele alınmalıdır:
 
-Çok etaplı modellerde şu riskler oluşabilir:
+- multi-host real network validation,
+- partition / fault scenarios,
+- state sync and snapshot recovery,
+- soak test.
 
-- docs başka yerde, gerçek altyapı başka yerde kalır,
-- testnet işleri tamamlandı sanılır ama mainnet tarafı açık kalır,
-- sürüm etiketi vardır ama içerik dağınık kalır,
-- bazı klasörler/artefact alanları placeholder olarak unutulur,
-- ekip “sonra tamamlarız” mantığıyla kritik boşlukları taşır.
+Bu alanlardan herhangi biri eksikse program “public real testnet ready” etiketi vermez.
 
-Bu belge bu riski reddeder. Bu programda yöntem şudur:
+### 1.4 Kanıt üretmeden etap kapanmaz
+Her etap için aşağıdakiler zorunludur:
 
-- önce tüm alanlar tek listede yazılır,
-- sonra hepsi aynı etap içinde sahiplenilir,
-- hiçbir alan “ileride bakarız” diye açık bırakılmaz,
-- program ancak tüm kapanış kriterleri geçtiğinde tamamlanmış sayılır.
-
----
-
-## 3. Tek etap ana hedefi
-
-### Birincil hedef
-AOXChain için **testnet ve mainnet hizalı, belgeye dayalı, sürüme bağlanmış, operasyona hazır, güvenlik kapıları tanımlı ve altyapı eksikleri kapatılmış** bir temel oluşturmak.
-
-### Sonuç cümlesi
-Tek etap bittiğinde aşağıdaki soru için cevap **evet** olmalıdır:
-
-> “Repo içinde ne var, nerede var, neden var, nasıl çalıştırılır, hangi sürümde geçerlidir ve testnet ile mainnet için ne seviyede hazırdır?”
+- dokümantasyon güncellemesi,
+- çalıştırılabilir komut seti,
+- ölçüm/kanıt artifact’ı,
+- açık risk listesi,
+- bir sonraki etabı unblock eden çıktı.
 
 ---
 
-## 4. Tek etap kapsamı
+## 2. Etap özeti
 
-Bu tek etap aşağıdaki alanların tamamını birlikte kapatır:
-
-1. docs bütünlüğü,
-2. mdBook bütünlüğü,
-3. sürümleme ve release başlangıç notları,
-4. eksik altyapı dosyaları ve klasör yerleşimi,
-5. config / fixture / artifact dizinlerinin açıklığı,
-6. node-run / servis akışı tanımı,
-7. P2P / ağ doğrulama planı,
-8. consensus güvenlik çekirdeği gereksinimleri,
-9. recovery / snapshot / restore / rejoin çerçevesi,
-10. RPC ve public yüzey güvenliği,
-11. observability / telemetry / soak beklentileri,
-12. release / provenance / rollback / upgrade planı,
-13. launch gate ve go/no-go yönetimi,
-14. owner / sorumluluk matrisi,
-15. kanıt paketleri ve artefact disiplini.
+| Etap | Başlık | Testnet odağı | Mainnet hizası |
+|---|---|---|---|
+| 1 | Program ve mimari hizalama | kapsam ve exit criteria | release governance ve sorumluluk matrisi |
+| 2 | Gerçek node çalıştırma temeli | node-run servis akışı | production service lifecycle |
+| 3 | Dağıtık ağ ve P2P gerçekleme | 3-5 node ayrı host | production transport + peer policy |
+| 4 | Consensus güvenlik çekirdeği | testnet öncesi consensus blocker’ları | mainnet safety invariants |
+| 5 | Dayanıklılık ve recovery | partition/restart/rejoin/snapshot | crash consistency + rollback discipline |
+| 6 | RPC ve public yüzey hardening | güvenli testnet erişimi | production authn/authz/TLS/rate limit |
+| 7 | Gözlemlenebilirlik ve soak | uzun süreli testnet koşusu | SLO/SLA ve alarm politikaları |
+| 8 | Release, upgrade ve provenance | testnet upgrade provası | signed release + migration + rollback |
+| 9 | Launch gate ve kademeli açılış | public testnet launch kararı | controlled mainnet launch kararı |
 
 ---
 
-## 5. Bu 1 etapta tam olarak ne yapılacak?
+## 3. Etap 1 — Program ve mimari hizalama
 
-Bu tek etapta yapılacak işler lafzi değil, doğrudan çıktı üreten çalışma başlıklarıdır.
+### Hedef
+Teknik, operasyonel ve güvenlik backlog’larını tek program altında toplamak.
 
-### 5.1 Docs tarafında yapılacaklar
-- tüm ana dokümanlar tek akış halinde gözden geçirilecek,
-- eksik başlıklar, eksik açıklamalar ve belirsiz yerler tamamlanacak,
-- hangi belgenin strateji, hangisinin runbook, hangisinin readiness/checklist olduğu netleştirilecek,
-- belgeler arası bağlantılar tutarlı hale getirilecek.
+### Testnet çıktısı
+- testnet için gerekli blocker listesi dondurulur,
+- etap bazlı sahiplik atanır,
+- readiness evidence dosyası stage review’larda kullanılacak tek kaynak olur.
 
-### 5.2 mdBook tarafında yapılacaklar
-- `SUMMARY.md` içeriği gerçek bilgi mimarisine göre düzeltilecek,
-- docs menüsünde görünmesi gereken ana sayfalar netleştirilecek,
-- kırık, eksik veya anlamı belirsiz navigasyon noktaları temizlenecek.
+### Mainnet çıktısı
+- release owner, security owner, networking owner, consensus owner, ops owner netleştirilir,
+- mainnet exception süreci tanımlanır,
+- “hangi eksikler testnet’i durdurur, hangileri mainnet’i durdurur” ayrımı yazılı hale gelir.
 
-### 5.3 Sürümleme tarafında yapılacaklar
-- `v0.1.1-alpha` bu programın resmi başlangıç bazı olarak tanımlanacak,
-- bu sürümün kapsamı yazılacak,
-- bu sürüm kapanmadan hangi alanların tamamlanması gerektiği tek listede sabitlenecek.
+### İş kalemleri
+- ortak risk register oluştur,
+- stage review şablonu tanımla,
+- exit criteria tablosunu standardize et,
+- doc-owner ve runbook-owner atamalarını yap.
 
-### 5.4 Altyapı dosyaları tarafında yapılacaklar
-- config, fixture, artifact ve output klasörlerinin yerleri yazılacak,
-- eksik dosyalar ve placeholder alanlar tek tek tespit edilecek,
-- mümkün olanlar tamamlanacak,
-- hemen tamamlanamayacak olanlar backlog'a açık ve sahipli şekilde bağlanacak.
-
-### 5.5 Node / network tarafında yapılacaklar
-- node'un nasıl başlatıldığı, hangi komutun demo olduğu, hangi komutun gerçek servis akışı olduğu açıklanacak,
-- local smoke ile real network validation ayrımı net yazılacak,
-- network validation çıktılarının nereye düştüğü belirlenecek.
-
-### 5.6 Consensus / recovery / security tarafında yapılacaklar
-- consensus için zorunlu kapanış maddeleri tek sayfada toplanacak,
-- recovery/snapshot/rejoin beklentileri bağlanacak,
-- RPC/public surface güvenlik beklentileri yazılacak,
-- testnet için kabul edilebilen risklerle mainnet için blocker olan riskler ayrılacak.
-
-### 5.7 Release / launch tarafında yapılacaklar
-- release owner, security owner, infra owner ve diğer zorunlu sahipler tanımlanacak,
-- go/no-go kararı için hangi belgelerin zorunlu olduğu yazılacak,
-- residual risk formatı netleştirilecek,
-- launch review girdileri standart hale getirilecek.
-
-### 5.8 Etap sonunda elimizde ne olacak?
-Bu tek etap bittiğinde elimizde şunlar olacak:
-
-1. tamamlanmış ana program belgesi,
-2. güncel `SUMMARY.md`,
-3. `v0.1.1-alpha` kapsam notu,
-4. owner matrisi,
-5. infra dizin sözlüğü,
-6. config/fixture/artifact yer listesi,
-7. testnet-mainnet readiness bağlama notu,
-8. launch review girdi listesi,
-9. residual risk kaydı,
-10. go/no-go değerlendirme zemini.
+### Exit criteria
+- 9 etap için sahipler atanmış,
+- her etap için testnet/mainnet kabul kriteri yazılmış,
+- blocker ve non-blocker ayrımı repo belgeleriyle uyumlu.
 
 ---
 
-## 6. Tek etap çıktı modeli
+## 4. Etap 2 — Gerçek node çalıştırma temeli
 
-Tek etap sonunda yalnızca belge üretilmiş olması yeterli değildir. Aşağıdaki bütün çıktılar birlikte tamamlanmalıdır.
+### Hedef
+Local smoke komutlarından çıkıp sürekli çalışan, denetlenebilir node servis modeline geçmek.
 
-### 6.1 Dokümantasyon çıktıları
-- ana program belgesi tamamlanmış olmalı,
-- `SUMMARY.md` gezinmesi doğru olmalı,
-- ilişkili belgeler arasında kırık referans olmamalı,
-- testnet, mainnet, network validation, recovery, security ve readiness belgeleri birbirine bağlanmalı,
-- her önemli klasör veya dosya ailesi için “ne işe yarar” açıklaması bulunmalı.
+### Testnet çıktısı
+- tek komutla node home bootstrap + node-run yapılır,
+- health/readiness sinyalleri üretilir,
+- süreç yeniden başlatıldığında deterministik boot davranışı gözlenir.
 
-### 6.2 Yapısal altyapı çıktıları
-- eksik klasör yerleri tanımlanmalı,
-- fixture/config/artifact/output dizinleri standardize edilmeli,
-- placeholder içerikler ayıklanmalı veya backlog'a bağlanmalı,
-- “dosya var ama amacı belirsiz” durumu kalmamalı,
-- örnek config ve örnek çalışma yolları tam yazılmalı.
+### Mainnet çıktısı
+- systemd/container/k8s benzeri servis modeli için lifecycle tanımı yapılır,
+- log rotation, env var sözleşmesi, secrets sınırı ve restart davranışı dokümante edilir.
 
-### 6.3 Operasyon çıktıları
-- node başlatma, durdurma, doğrulama ve sağlık kontrol akışı yazılmalı,
-- operatör hangi komutu hangi sırayla çalıştıracağını net olarak görmeli,
-- recovery ve incident süreçleri belgeler arasında tutarlı olmalı,
-- launch öncesi kim neyi onaylayacak açıkça yazılmalı.
+### İş kalemleri
+- `node-run` servis akışını birincil çalışma modu yap,
+- health ve readiness endpoint/komutlarını standardize et,
+- startup öncesi config/genesis/identity doğrulama kapıları ekle,
+- servis runbook’unu yaz.
 
-### 6.4 Güvenlik ve release çıktıları
-- sürüm etiketiyle ilişkili release başlangıç notu olmalı,
-- rollback / migration / upgrade yaklaşımı yazılı olmalı,
-- security owner ve release owner net olmalı,
-- testnet için kabul edilen riskler ile mainnet için kabul edilmeyen riskler ayrılmalı.
+### Exit criteria
+- en az 1 node, sürekli modda istikrarlı çalışır,
+- operatör tek-atımlık smoke yerine servis akışını kullanır,
+- servis başlatma/durdurma/doğrulama runbook’u tamamlanır.
 
 ---
 
-## 7. Tamamlama iş paketleri
+## 5. Etap 3 — Dağıtık ağ ve P2P gerçekleme
 
-### 7.1 Paket A — Docs ve mdBook %100 kapanış
+### Hedef
+Loopback smoke’tan çıkıp gerçek çok düğümlü ağ davranışını doğrulamak.
 
-#### Hedef
-Belge tarafında hiçbir belirsizlik bırakmamak.
+### Testnet çıktısı
+- 3-5 node ayrı host veya ayrı network namespace üzerinde çalışır,
+- peer bağlantısı ve block/tx propagation ölçülür,
+- multi-host validation raporu oluşturulur.
 
-#### Yapılacaklar
-- `docs/src/` içindeki temel belgeleri tek tek gözden geçir,
-- eksik başlık, eksik içerik, eksik bağlam ve kırık akışları kapat,
-- `SUMMARY.md` içinde görünmesi gereken tüm ana belgeleri ekle,
-- başlık adlarını anlamlı ve tutarlı hale getir,
-- hangi belge strateji, hangisi runbook, hangisi checklist, hangisi teknik plan açıkça ayrıştır.
+### Mainnet çıktısı
+- transport-backed gossip tamamlanır,
+- peer admission, routing ve secure-mode varsayımları production profile ile uyumlu hale gelir,
+- public topology için peer policy yazılır.
 
-#### Tamamlanmış sayılma şartı
-- yeni katkı yapan biri docs ağacını okuyunca yolunu kaybetmez,
-- menüde görünen yapı ile repo gerçek yapısı çelişmez,
-- docs tarafında bilinen açık boşluk kalmaz.
+### İş kalemleri
+- gerçek transport bağla,
+- peer routing/discovery yaklaşımını netleştir,
+- propagation metriği üret,
+- distributed validation artifacts klasörünü standardize et.
 
-### 7.2 Paket B — Sürümleme ve `v0.1.1-alpha` başlangıç bazı
-
-#### Hedef
-Programı versiyonsuz bırakmamak.
-
-#### Yapılacaklar
-- `v0.1.1-alpha` etiketinin kapsamını yaz,
-- bu sürümün neden başlangıç bazı olduğunu açıkla,
-- bu sürüm altında kapanacak alanları sabitle,
-- bir üst sürüme geçiş şartlarını yaz.
-
-#### Tamamlanmış sayılma şartı
-- herkes `v0.1.1-alpha`'nın neyi temsil ettiğini bilir,
-- sürüm adı ile içerik arasında boşluk kalmaz.
-
-### 7.3 Paket C — Altyapı dosyaları ve klasör yerleşimi
-
-#### Hedef
-“Eksik dosya”, “bu klasör ne için”, “artifact nereye düşecek” gibi soruları sıfırlamak.
-
-#### Yapılacaklar
-- config dizinlerini listele,
-- fixture dizinlerini listele,
-- artifact çıkış dizinlerini tanımla,
-- validation ve soak çıktılarının yerini yaz,
-- eksik dosyalar varsa ya üret ya da neden eksik olduğunu resmî backlog maddesine çevir.
-
-#### Tamamlanmış sayılma şartı
-- repo içindeki kritik dosya aileleri belgelenmiş olur,
-- ops, qa ve engineering aynı dizin sözlüğünü kullanır.
-
-### 7.4 Paket D — Node, network ve servis çalıştırma akışı
-
-#### Hedef
-Çalıştırma yolu tek ve anlaşılır olsun.
-
-#### Yapılacaklar
-- node bootstrap akışını yaz,
-- node-run / servis modu beklentisini netleştir,
-- health/readiness kontrolünün nerede yapıldığını yaz,
-- gerçek ağ testi ile local smoke farkını ayır.
-
-#### Tamamlanmış sayılma şartı
-- operatör “hangi komut demo, hangi komut servis, hangi komut validation” ayrımını net görür.
-
-### 7.5 Paket E — Consensus, recovery ve güvenlik kapanış matrisi
-
-#### Hedef
-Testnet ve mainnet arasında kritik güvenlik boşluğu bırakmamak.
-
-#### Yapılacaklar
-- consensus çekirdeği için zorunlu gereksinimleri tek listede topla,
-- recovery/snapshot/rejoin gereksinimlerini bağla,
-- RPC security ve public surface beklentilerini yaz,
-- testnet için kabul edilebilen ile mainnet için blocker olan riskleri ayır.
-
-#### Tamamlanmış sayılma şartı
-- teknik ekip “hangi eksik testnet blocker, hangisi mainnet blocker” sorusunu tek sayfadan cevaplayabilir.
-
-### 7.6 Paket F — Launch gate ve karar yönetimi
-
-#### Hedef
-Program bitince karar mekanizması net olsun.
-
-#### Yapılacaklar
-- go/no-go çıktısını tanımla,
-- owner listesini yaz,
-- launch review toplantısında hangi belgelerin zorunlu olduğunu belirt,
-- residual risk kaydını formatla.
-
-#### Tamamlanmış sayılma şartı
-- launch kararı sezgisel değil, belgeye dayalı hale gelir.
+### Exit criteria
+- multi-host validation `missing` durumundan çıkar,
+- 3+ node ağ raporu tekrar üretilebilir hale gelir,
+- peer sayısı, sync yakınsaması ve propagation görünürlüğü raporlanır.
 
 ---
 
-## 8. Sahiplik matrisi
+## 6. Etap 4 — Consensus güvenlik çekirdeği
 
-Tek etap ancak sahiplik açıksa tamamlanabilir.
+### Hedef
+Deterministic scaffold’u testnet ve ardından mainnet için güvenlik odaklı consensus çekirdeğine yükseltmek.
 
-### Zorunlu roller
-- **Docs Owner:** belge bütünlüğü ve mdBook doğruluğu
-- **Release Owner:** sürüm etiketi, release scope, promotion kararı
-- **Infra Owner:** klasör yapısı, artifact yerleri, çalışma ortamı beklentileri
-- **Network Owner:** gerçek ağ doğrulama, peer/topology beklentileri
-- **Consensus Owner:** güvenlik çekirdeği, finality ve state kuralları
-- **Security Owner:** RPC/public surface/replay/auth varsayımları
-- **Ops Owner:** runbook, incident, recovery, launch operasyonu
+### Testnet çıktısı
+- quorum certificate modeli uygulanır,
+- validator-set snapshots eklenir,
+- persistent consensus store hazırlanır,
+- replay/recovery path çalışır,
+- authenticated transport envelope ve temel property/fuzz testleri eklenir.
 
-### Kural
-Bu roller isimlendirilmeden tek etap kapatılamaz.
+### Mainnet çıktısı
+- safety invariant’leri belge ve testlerle bağlanır,
+- certificate bağlamı era/round/validator-set/signer set seviyesinde doğrulanır,
+- consensus değişiklikleri için rollback ve compatibility kapıları hazırlanır.
 
----
+### İş kalemleri
+- QC veri modeli ve doğrulama hattı,
+- validator authority snapshot akışı,
+- persistent store ve replay log tasarımı,
+- pacemaker genişletmesi,
+- consensus integration + adversarial test matrisi.
 
-## 9. Zorunlu checklist
-
-Aşağıdaki listenin tamamı **evet** olmadan tek etap kapanmaz.
-
-### 9.1 Docs / md checklist
-- [ ] Ana belge tam ve tutarlı
-- [ ] `SUMMARY.md` tam
-- [ ] mdBook yapısı kırık değil
-- [ ] İlişkili belge bağlantıları anlamlı
-- [ ] Strateji / runbook / checklist ayrımı net
-
-### 9.2 Version / release checklist
-- [ ] `v0.1.1-alpha` kapsamı yazıldı
-- [ ] Başlangıç release notu yazıldı
-- [ ] Bir üst sürüme geçiş şartı tanımlandı
-- [ ] Sürüm adı ile kapsam uyumlu
-
-### 9.3 Infra checklist
-- [ ] Kritik config dizinleri yazıldı
-- [ ] Fixture yerleri yazıldı
-- [ ] Artifact/output yerleri yazıldı
-- [ ] Eksik dosyalar üretildi veya backlog'a bağlandı
-- [ ] Dizin sözlüğü tamamlandı
-
-### 9.4 Runtime / network checklist
-- [ ] Node başlatma akışı açık
-- [ ] Servis modu beklentisi açık
-- [ ] Health/readiness açıklığı var
-- [ ] Local smoke ile real network farkı yazıldı
-- [ ] Validation çıktılarının yeri belli
-
-### 9.5 Security / recovery checklist
-- [ ] Consensus kapanış maddeleri tek listede
-- [ ] Recovery/snapshot çerçevesi bağlı
-- [ ] RPC security beklentileri yazıldı
-- [ ] Testnet/Mainnet risk ayrımı yazıldı
-- [ ] Launch gate blocker'ları net
-
-### 9.6 Governance checklist
-- [ ] Owner'lar atandı
-- [ ] Go/No-Go formatı yazıldı
-- [ ] Residual risk formatı yazıldı
-- [ ] Launch review girdileri yazıldı
+### Exit criteria
+- “must fix before testnet” listesi kapatılmış olur,
+- consensus state restart sonrası deterministik davranır,
+- quorum/finality yolunda tekrar üretilebilir test kanıtı vardır.
 
 ---
 
-## 10. Zorunlu artefact paketi
+## 7. Etap 5 — Dayanıklılık ve recovery
 
-Tek etap kapanırken şu paketler bulunmalıdır:
+### Hedef
+Ağın hata, partition ve yeniden katılım senaryolarında güvenli ve ölçülebilir davranmasını sağlamak.
 
-1. program belgesi,
-2. güncel `SUMMARY.md`,
-3. sürüm kapsam notu,
-4. owner matrisi,
-5. infra dizin sözlüğü,
-6. config/fixture/artifact yer listesi,
-7. launch review girdi listesi,
-8. residual risk kaydı,
-9. testnet/mainnet readiness bağlama notu.
+### Testnet çıktısı
+- partition/restart/delay/drop/timeout senaryoları çalıştırılır,
+- snapshot export/import ve node rejoin testi yapılır,
+- recovery süresi ve state hash tutarlılığı ölçülür.
 
----
+### Mainnet çıktısı
+- crash consistency, disk bozulması, rollback ve restore disiplini yazılı hale gelir,
+- recovery tatbikatı release öncesi zorunlu prova olur.
 
-## 11. Go / No-Go kuralı
+### İş kalemleri
+- `tc netem`/firewall/process-control tabanlı test harness,
+- snapshot formatı ve metadata sözleşmesi,
+- restore sonrası hash/height doğrulaması,
+- failure report şablonu ve recovery checklist’i.
 
-Aşağıdaki durumlardan biri varsa sonuç **No-Go** olur:
-
-- docs tarafında kritik boşluk varsa,
-- mdBook gezintisinde belirsizlik varsa,
-- `v0.1.1-alpha` kapsamı yazılmadıysa,
-- eksik altyapı dosyaları/yerleri tanımlanmadıysa,
-- owner listesi boşsa,
-- launch gate için gerekli girişler eksikse,
-- testnet ve mainnet readiness bağlamı ayrıştırılmadıysa.
-
-Aşağıdaki durumların tamamı sağlanırsa sonuç **Go** olabilir:
-
-- belge tarafı tam,
-- sürüm tarafı tam,
-- altyapı haritası tam,
-- operasyon akışı tam,
-- risk formatı tam,
-- sahiplik tam,
-- launch review girdileri tam.
+### Exit criteria
+- partition/fault ve snapshot/recovery blocker’ları kapanır,
+- rejoin sonrası zincir yakınsaması kanıtlanır,
+- recovery runbook’u operasyon ekibi tarafından uygulanabilir hale gelir.
 
 ---
 
-## 12. Başarı tanımı
+## 8. Etap 6 — RPC ve public yüzey hardening
 
-Bu tek etap programı şu durumda başarılı kabul edilir:
+### Hedef
+Testnet’i dış dünyaya açarken public attack surface’i kontrol altına almak.
 
-- AOXChain deposu belge ve altyapı açısından dağınık görünmez,
-- `v0.1.1-alpha` başlangıç bazı netleşmiş olur,
-- testnet ile mainnet aynı program altında konuşulabilir hale gelir,
-- eksik dosya/yer/sürüm/owner soruları cevaplanmış olur,
-- sonraki teknik uygulama işleri artık belirsizlikle değil, net bir altyapı tabanı üstünde ilerler.
+### Testnet çıktısı
+- güvenli testnet RPC profili tanımlanır,
+- TLS/mTLS, auth, rate-limit ve erişim politikası uygulanır,
+- insecure-mode davranışının nerede kabul edilemez olduğu belgelenir.
+
+### Mainnet çıktısı
+- production authn/authz modeli finalize edilir,
+- certificate binding, replay kontrolü ve handshake güvenlik varsayımları denetlenir,
+- public endpoint policy ve abuse response planı yazılır.
+
+### İş kalemleri
+- JSON-RPC / WS / gRPC için güvenlik profilleri,
+- IP / client / method bazlı rate-limit,
+- certificate ve attestation kontrolleri,
+- public API runbook ve incident response ekleri.
+
+### Exit criteria
+- güvenli testnet erişimi operasyonel olarak açılabilir,
+- network security checklist maddeleri ölçülebilir hale gelir,
+- public endpoint’ler için kabul/ret kuralları açıktır.
 
 ---
 
-## 13. Uygulama talimatı
+## 9. Etap 7 — Gözlemlenebilirlik ve soak
 
-Bu belgeyi şu şekilde kullan:
+### Hedef
+Ağın kısa demo yerine uzun süreli işletime uygun olduğunu göstermek.
 
-1. Önce bu tek etap checklist'ini doldur.
-2. Eksik dosya ve klasörleri yaz.
-3. `v0.1.1-alpha` kapsamını sabitle.
-4. Owner'ları ata.
-5. Launch review girdilerini tanımla.
-6. Ancak bundan sonra yeni teknik geliştirme etaplarına geç.
+### Testnet çıktısı
+- soak test planı uygulanır,
+- block time, throughput, peer count, sync state, error counters görünür olur,
+- uzun süreli çalışma boyunca stall/leak/crash sinyalleri toplanır.
 
-Yani karar nettir:
+### Mainnet çıktısı
+- SLO/SLA eşiği belirlenir,
+- alarm kuralları ve escalation akışı tanımlanır,
+- release gate’e bağlanan telemetry dashboard seti hazırlanır.
 
-> Önce tek etapta altyapı ve belge tabanı %100 kapanacak, sonra ileri uygulama işleri başlayacak.
+### İş kalemleri
+- standard metric seti,
+- tracing/structured logs sözleşmesi,
+- soak runner ve artifact formatı,
+- alert routing ve on-call entegrasyonu.
+
+### Exit criteria
+- soak test blocker’ı kapanır,
+- telemetry `partial` durumundan çıkar,
+- belirli süreli koşu için sağlık raporu üretilebilir hale gelir.
+
+---
+
+## 10. Etap 8 — Release, upgrade ve provenance
+
+### Hedef
+Ağ yazılımının güvenilir biçimde yayınlanması ve yükseltilmesi.
+
+### Testnet çıktısı
+- testnet için imzalı artifact akışı kurulur,
+- upgrade rehearsal yapılır,
+- migration/compatibility/rollback provası yapılır.
+
+### Mainnet çıktısı
+- signed release manifests,
+- reproducible build attestations,
+- deterministic upgrade/version migration policy,
+- rollback gate ve release approval süreci tamamlanır.
+
+### İş kalemleri
+- artifact signing,
+- version compatibility matrisi,
+- schema/state migration testleri,
+- rollback prosedürü ve release checklist.
+
+### Exit criteria
+- upgrade/migration planning `missing` durumundan çıkar,
+- en az bir testnet upgrade provası başarıyla tamamlanır,
+- release provenance zinciri doğrulanabilir hale gelir.
+
+---
+
+## 11. Etap 9 — Launch gate ve kademeli açılış
+
+### Hedef
+Testnet ve mainnet için bağımsız fakat hizalı launch kararı verebilmek.
+
+### Testnet çıktısı
+- controlled public testnet launch kararı verilir,
+- validator/operator onboarding seti tamamlanır,
+- launch sonrası ilk 2-4 hafta için risk odaklı gözlem planı çalışır.
+
+### Mainnet çıktısı
+- mainnet launch gate yalnızca tüm zorunlu kapılar kapalıysa açılır,
+- istisna varsa time-boxed ve release owner onaylı olur,
+- progressive rollout + rollback kriterleri önceden ilan edilir.
+
+### İş kalemleri
+- launch review board toplantısı,
+- exception register gözden geçirme,
+- canary/progressive rollout şeması,
+- first-week incident and escalation drill.
+
+### Exit criteria
+- testnet launch raporu ve mainnet readiness raporu birbirine bağlanır,
+- her iki ağ için ayrı ama hizalı go/no-go kararı kayıt altına alınır,
+- post-launch takip penceresi sahipleri atanır.
+
+---
+
+## 12. Etap bağımlılıkları
+
+### Sıralı bağımlılıklar
+- Etap 2, Etap 1 olmadan başlamamalı.
+- Etap 3, Etap 2’nin servis akışı netleşmeden kapanmamalı.
+- Etap 4, Etap 3’te gerçek ağ hareketi görülmeden production-iddialı kapanmamalı.
+- Etap 5, Etap 4’te replay/persistent-store tabanı kurulmadan güvenli ilerlemez.
+- Etap 6 ve 7, Etap 3–5 çıktıları üstüne inşa edilir.
+- Etap 8, Etap 4–7’den gelen teknik ve operasyonel kanıt olmadan anlamsız kalır.
+- Etap 9, önceki bütün etapların kapanış raporunu tüketir.
+
+### Paralel yürütülebilecek akışlar
+- Etap 6 ile Etap 7 kısmen paralel yürütülebilir.
+- Etap 8’in release otomasyonu, Etap 6–7 sonlarına doğru başlatılabilir.
+- Etap 1 boyunca risk, doc ve sahiplik işleri tüm etaplara paralel akar.
+
+---
+
+## 13. Her etap için zorunlu çıktı paketi
+
+Her etap kapanırken aşağıdaki paket üretilmelidir:
+
+1. **Design note**
+2. **Runbook update**
+3. **Programmatic evidence**
+4. **Observed risk / residual risk listesi**
+5. **Testnet outcome**
+6. **Mainnet outcome**
+7. **Go / No-Go kararı**
+
+Artifact örnekleri:
+- benchmark logları,
+- distributed validation json’ları,
+- soak raporları,
+- screenshot yerine terminal transcript’leri,
+- signed manifest hash kayıtları,
+- failure injection sonuç raporları.
+
+---
+
+## 14. Önerilen yönetim ritmi
+
+### Haftalık
+- engineering stage sync,
+- blocker review,
+- dokümantasyon delta kontrolü,
+- risk register güncellemesi.
+
+### Etap sonu
+- exit criteria review,
+- artifacts doğrulaması,
+- açık risklerin sahiplenilmesi,
+- bir sonraki etap için unblock kararı.
+
+### Launch öncesi
+- full readiness review,
+- incident drill tekrar kontrolü,
+- runbook walk-through,
+- release artifact doğrulaması.
+
+---
+
+## 15. Başarı ölçütü
+
+Bu 9 etap programı, aşağıdaki durum elde edildiğinde başarılı kabul edilir:
+
+- testnet, gerçek çok düğümlü ve gözlemlenebilir bir ağ olarak çalışır,
+- testnet’te doğrulanan kritik yollar mainnet launch gate’ine ölçülebilir şekilde bağlanır,
+- consensus, network, recovery, security ve ops alanlarında blocker kalmaz,
+- release ve upgrade süreçleri imzalı, tekrar üretilebilir ve rollback destekli hale gelir,
+- testnet ve mainnet artık ayrı hayaller değil, tek bir mühendislik programının iki farklı açılış kapısı olur.
+
+---
+
+## 16. Önerilen ilk kullanım biçimi
+
+Bu belge aşağıdaki belgelerle birlikte kullanılmalıdır:
+
+- `GERCEK_AG_HAZIRLIK_KRITERLERI_TR.md`
+- `REAL_NETWORK_VALIDATION_RUNBOOK_TR.md`
+- `AOXC_KERNEL_HARDENING_MASTER_PLAN_TR.md`
+- `AUDIT_READINESS_AND_OPERATIONS.md`
+- `MAINNET_READINESS_CHECKLIST.md`
+- `models/mainnet_readiness_evidence_v1.yaml`
+
+Uygulama önerisi:
+1. Bu 9 etap belgesini ana program belgesi kabul et.
+2. Her etap için issue/milestone aç.
+3. Readiness evidence dosyasını etap review toplantılarında güncelle.
+4. Testnet ve mainnet launch kararlarını bu belge üstünden ver.
