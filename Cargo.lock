@@ -2226,11 +2226,16 @@ name = "tests"
 version = "0.0.0-alpha.1"
 dependencies = [
  "aoxcdata",
+ "aoxcmd",
+ "aoxcnet",
  "aoxconfig",
  "aoxcontract",
  "aoxcore",
  "aoxcsdk",
+ "aoxcunity",
  "aoxcvm",
+ "ed25519-dalek",
+ "hex",
  "serde",
  "serde_json",
  "tokio",
