@@ -20,7 +20,7 @@ impl KeyMaterial {
             encrypt_key_to_envelope(engine.master_seed(), password).map_err(|error| {
                 AppError::with_source(
                     ErrorCode::KeyMaterialInvalid,
-                    "Failed to protect operator key material",
+                    "Failed to read canonical consensus public key from key bundle",
                     error,
                 )
             })?;

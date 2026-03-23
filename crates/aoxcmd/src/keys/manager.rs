@@ -2,7 +2,7 @@ use crate::{
     error::AppError,
     keys::{
         loader::{load_operator_key, persist_operator_key},
-        material::KeyMaterial,
+        material::{KeyMaterial, KeyMaterialSummary},
     },
 };
 

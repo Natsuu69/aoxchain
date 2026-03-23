@@ -93,6 +93,11 @@ pub fn cmd_keys_show_fingerprint(args: &[String]) -> Result<(), AppError> {
     )
 }
 
+pub fn cmd_keys_inspect(args: &[String]) -> Result<(), AppError> {
+    let summary = inspect_operator_key()?;
+    emit_serialized(&summary, output_format(args))
+}
+
 pub fn cmd_keys_verify(args: &[String]) -> Result<(), AppError> {
     let password = arg_value(args, "--password");
     verify_operator_key(password.as_deref())?;
