@@ -36,8 +36,14 @@
 
 - [ ] on-call runbook exists and is current
 - [ ] incident response drill has been performed recently
+- [ ] security drill / penetration baseline evidence is current
 - [ ] 10-minute onboarding guide is current
 - [ ] escalation owners are named for consensus, networking, execution, and keys
+
+## Wallet / hub compatibility
+
+- [ ] desktop wallet compatibility is verified against AOXHub
+- [ ] mainnet/testnet routing and signing flows are consistent across wallet clients
 
 ## Launch gate
 

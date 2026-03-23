@@ -13,6 +13,7 @@ use crate::{
     },
 };
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     collections::BTreeMap,
     fs,
@@ -283,6 +284,20 @@ fn evaluate_mainnet_readiness(
             ),
         ),
         readiness_check(
+            "security-drill-evidence",
+            "operations",
+            has_security_drill_artifact(&closure_dir),
+            4,
+            "Security drill evidence must capture penetration, RPC hardening, and session replay scenarios".to_string(),
+        ),
+        readiness_check(
+            "desktop-wallet-hub-compat",
+            "release",
+            has_desktop_wallet_compat_artifact(&closure_dir),
+            4,
+            "Desktop wallet compatibility evidence must cover AOXHub plus mainnet/testnet routing".to_string(),
+        ),
+        readiness_check(
             "compatibility-matrix",
             "release",
             has_matching_artifact(&release_dir, "compat-matrix-", ".json"),
@@ -542,6 +557,12 @@ fn remediation_plan(checks: &[ReadinessCheck]) -> Vec<String> {
             "production-closure" => {
                 "Refresh production closure artifacts under `artifacts/network-production-closure/`."
             }
+            "security-drill-evidence" => {
+                "Record a fresh security drill with penetration, RPC hardening, and session replay evidence before promotion."
+            }
+            "desktop-wallet-hub-compat" => {
+                "Publish `desktop-wallet-compat.json` proving the desktop wallet remains compatible with AOXHub and both network tracks."
+            }
             "compatibility-matrix" => {
                 "Publish a fresh compatibility matrix for the candidate release."
             }
@@ -584,6 +605,47 @@ fn has_production_closure_artifacts(dir: &Path) -> bool {
     ]
     .iter()
     .all(|file| dir.join(file).exists())
+}
+
+fn has_security_drill_artifact(dir: &Path) -> bool {
+    json_artifact_has_required_strings(
+        &dir.join("security-drill.json"),
+        "scenarios",
+        &["penetration-baseline", "rpc-authz", "session-replay"],
+    )
+}
+
+fn has_desktop_wallet_compat_artifact(dir: &Path) -> bool {
+    json_artifact_has_required_strings(
+        &dir.join("desktop-wallet-compat.json"),
+        "surfaces",
+        &["desktop-wallet", "aoxhub", "mainnet", "testnet"],
+    )
+}
+
+fn json_artifact_has_required_strings(path: &Path, key: &str, required: &[&str]) -> bool {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&raw) else {
+        return false;
+    };
+    let Some(values) = value
+        .get(key)
+        .and_then(|entry| entry.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>()
+        })
+    else {
+        return false;
+    };
+
+    required
+        .iter()
+        .all(|needle| values.iter().any(|value| value == needle))
 }
 
 fn has_matching_artifact(dir: &Path, prefix: &str, suffix: &str) -> bool {
@@ -932,6 +994,42 @@ mod tests {
 
         assert!(has_matching_artifact(&dir, "provenance-", ".json"));
         assert!(!has_matching_artifact(&dir, "compat-matrix-", ".json"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn security_drill_artifact_requires_expected_scenarios() {
+        let dir = unique_dir("security-drill");
+        fs::create_dir_all(&dir).expect("fixture directory should be created");
+        fs::write(
+            dir.join("security-drill.json"),
+            r#"{
+  "status": "completed",
+  "scenarios": ["penetration-baseline", "rpc-authz", "session-replay"]
+}"#,
+        )
+        .expect("security drill artifact should be written");
+
+        assert!(has_security_drill_artifact(&dir));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn desktop_wallet_compat_artifact_requires_all_surfaces() {
+        let dir = unique_dir("desktop-wallet-compat");
+        fs::create_dir_all(&dir).expect("fixture directory should be created");
+        fs::write(
+            dir.join("desktop-wallet-compat.json"),
+            r#"{
+  "status": "validated",
+  "surfaces": ["desktop-wallet", "aoxhub", "mainnet", "testnet"]
+}"#,
+        )
+        .expect("desktop wallet compatibility artifact should be written");
+
+        assert!(has_desktop_wallet_compat_artifact(&dir));
 
         let _ = fs::remove_dir_all(dir);
     }
