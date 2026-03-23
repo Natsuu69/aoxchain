@@ -937,6 +937,32 @@ fn write_readiness_markdown_report(
     })
 }
 
+fn write_full_surface_markdown_report(
+    path: &Path,
+    readiness: &FullSurfaceReadiness,
+) -> Result<(), AppError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            AppError::with_source(
+                ErrorCode::FilesystemIoFailed,
+                format!(
+                    "Failed to create full-surface report directory {}",
+                    parent.display()
+                ),
+                e,
+            )
+        })?;
+    }
+
+    fs::write(path, full_surface_markdown_report(readiness)).map_err(|e| {
+        AppError::with_source(
+            ErrorCode::FilesystemIoFailed,
+            format!("Failed to write full-surface report {}", path.display()),
+            e,
+        )
+    })
+}
+
 fn readiness_markdown_report(
     readiness: &Readiness,
     embedded_baseline: Option<&ProfileBaselineReport>,
@@ -1015,6 +1041,95 @@ fn readiness_markdown_report(
             "- [{}] **{}** / {} / weight {} — {}\n",
             marker, check.name, check.area, check.weight, check.detail
         ));
+    }
+
+    out
+}
+
+fn full_surface_markdown_report(readiness: &FullSurfaceReadiness) -> String {
+    let mut out = String::new();
+    out.push_str("# AOXC Full-Surface Readiness Report\n\n");
+    out.push_str(&format!(
+        "- Release line: `{}`\n- Overall status: `{}`\n- Overall score: **{}%**\n- Candidate surfaces: **{}/{}**\n\n",
+        readiness.release_line,
+        readiness.overall_status,
+        readiness.overall_score,
+        readiness.candidate_surfaces,
+        readiness.total_surfaces,
+    ));
+
+    out.push_str("## Surface summary\n\n");
+    for surface in &readiness.surfaces {
+        out.push_str(&format!(
+            "- **{}** / owner `{}` — status `{}` — score **{}%** ({}/{})\n",
+            surface.surface,
+            surface.owner,
+            surface.status,
+            surface.score,
+            surface.passed_checks,
+            surface.total_checks
+        ));
+    }
+
+    out.push_str("\n## Global blockers\n\n");
+    if readiness.blockers.is_empty() {
+        out.push_str("- No active blockers.\n");
+    } else {
+        for blocker in &readiness.blockers {
+            out.push_str(&format!("- {}\n", blocker));
+        }
+    }
+
+    out.push_str("\n## Next focus\n\n");
+    if readiness.next_focus.is_empty() {
+        out.push_str("- Preserve current candidate state and keep evidence fresh.\n");
+    } else {
+        for focus in &readiness.next_focus {
+            out.push_str(&format!("- {}\n", focus));
+        }
+    }
+
+    out.push_str("\n## Surface details\n\n");
+    for surface in &readiness.surfaces {
+        out.push_str(&format!(
+            "### {} ({})\n\n- Owner: `{}`\n- Status: `{}`\n- Score: **{}%** ({}/{})\n",
+            surface.surface,
+            surface.surface.to_uppercase(),
+            surface.owner,
+            surface.status,
+            surface.score,
+            surface.passed_checks,
+            surface.total_checks
+        ));
+
+        out.push_str("- Evidence:\n");
+        for item in &surface.evidence {
+            out.push_str(&format!("  - `{}`\n", item));
+        }
+
+        out.push_str("- Checks:\n");
+        for check in &surface.checks {
+            out.push_str(&format!(
+                "  - [{}] {} — {}\n",
+                if check.passed { "PASS" } else { "FAIL" },
+                check.name,
+                check.detail
+            ));
+        }
+
+        out.push_str("- Remediation:\n");
+        for item in &surface.remediation {
+            out.push_str(&format!("  - {}\n", item));
+        }
+
+        if !surface.blockers.is_empty() {
+            out.push_str("- Blockers:\n");
+            for blocker in &surface.blockers {
+                out.push_str(&format!("  - {}\n", blocker));
+            }
+        }
+
+        out.push('\n');
     }
 
     out
