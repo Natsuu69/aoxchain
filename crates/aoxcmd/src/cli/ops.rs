@@ -1050,11 +1050,18 @@ fn readiness_markdown_report(
     out
 }
 
+fn surface_check_counts(surface: &SurfaceReadiness) -> (usize, usize) {
+    (
+        surface.checks.iter().filter(|check| check.passed).count(),
+        surface.checks.len(),
+    )
+}
+
 fn full_surface_markdown_report(readiness: &FullSurfaceReadiness) -> String {
     let mut out = String::new();
     out.push_str("# AOXC Full-Surface Readiness Report\n\n");
     out.push_str(&format!(
-        "- Release line: `{}`\n- Overall status: `{}`\n- Overall score: **{}%**\n- Candidate surfaces: **{}/{}**\n\n",
+        "- Release line: `{}`\n- Canonical matrix: `models/full_surface_readiness_matrix_v1.yaml`\n- Overall status: `{}`\n- Overall score: **{}%**\n- Candidate surfaces: **{}/{}**\n\n",
         readiness.release_line,
         readiness.overall_status,
         readiness.overall_score,
@@ -1603,7 +1610,8 @@ mod tests {
         has_desktop_wallet_compat_artifact, has_matching_artifact,
         has_production_closure_artifacts, has_release_evidence, has_security_drill_artifact,
         locate_repo_artifact_dir, parse_network_profile, ports_are_shifted_consistently,
-        readiness_markdown_report, surface_check, write_readiness_markdown_report,
+        readiness_markdown_report, surface_check, surface_check_counts,
+        write_full_surface_markdown_report, write_readiness_markdown_report,
     };
     use crate::config::settings::Settings;
     use std::{
