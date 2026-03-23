@@ -22,12 +22,6 @@ pub enum TransactionHashError {
     LengthOverflow,
 }
 
-impl From<std::num::TryFromIntError> for TransactionHashError {
-    fn from(_: std::num::TryFromIntError) -> Self {
-        Self::LengthOverflow
-    }
-}
-
 /// Canonical hash output size in bytes.
 pub const HASH_SIZE: usize = 32;
 
