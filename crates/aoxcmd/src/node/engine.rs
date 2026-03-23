@@ -9,7 +9,7 @@ use crate::{
 use aoxcore::{
     block::{AssemblyLane, CanonicalBlockAssemblyPlan},
     receipts::Receipt,
-    transaction::{Transaction, TransactionPool},
+    transaction::Transaction,
 };
 use aoxcunity::{
     Block, BlockBody, BlockSection, ConsensusMessage, LaneCommitment, LaneCommitmentSection,
@@ -18,8 +18,6 @@ use aoxcunity::{
 use ed25519_dalek::{Signer, SigningKey};
 use sha3::{Digest, Sha3_256};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-const MAX_TRANSACTIONS_PER_PROPOSAL: usize = 256;
 
 /// Produces a single block from the provided transaction payload.
 ///
@@ -33,7 +31,7 @@ pub fn produce_once(tx: &str) -> Result<NodeState, AppError> {
 
     let key_material = crate::keys::loader::load_operator_key()?;
     let block = build_block_for_tx(&state, tx, &key_material)?;
-    apply_block_proposal(&mut state, tx, &block, &key_material)?;
+    apply_block_proposal(&mut state, tx, &block, &key_material);
 
     persist_state(&state)?;
     Ok(state)
@@ -48,7 +46,7 @@ pub fn run_rounds(rounds: u64, tx_prefix: &str) -> Result<NodeState, AppError> {
     for index in 0..rounds {
         let tx = format!("{tx_prefix}-{index}");
         let block = build_block_for_tx(&state, &tx, &key_material)?;
-        apply_block_proposal(&mut state, &tx, &block, &key_material)?;
+        apply_block_proposal(&mut state, &tx, &block, &key_material);
     }
 
     persist_state(&state)?;
@@ -77,13 +75,17 @@ fn build_block_for_tx(
     )?;
 
     let proposer_key = proposer_key_from_material(key_material)?;
-    let mut pending = PendingBlockInput::default();
-    pending.admit(transaction_from_payload(tx)?)?;
-    let planner = DeterministicProposalPlanner::new(MAX_TRANSACTIONS_PER_PROPOSAL);
-    let execution_batch = planner.plan_and_execute(&pending.pool)?;
-    let assembly_plan = planner.assemble(height, parent_hash, proposer_key, &execution_batch)?;
 
-    let lane_commitment = lane_commitment_from_assembly(&assembly_plan, tx, round)?;
+    let lane_commitment = LaneCommitment {
+        lane_id: 1,
+        lane_type: LaneType::Native,
+        tx_count: 1,
+        input_root: derive_digest32("AOXC-CMD-INPUT", tx.as_bytes()),
+        output_root: derive_digest32("AOXC-CMD-OUTPUT", tx.as_bytes()),
+        receipt_root: derive_digest32("AOXC-CMD-RECEIPT", tx.as_bytes()),
+        state_commitment: derive_digest32("AOXC-CMD-STATE", format!("{height}:{tx}").as_bytes()),
+        proof_commitment: derive_digest32("AOXC-CMD-PROOF", format!("{round}:{tx}").as_bytes()),
+    };
 
     let body = BlockBody {
         sections: vec![BlockSection::LaneCommitment(LaneCommitmentSection {
@@ -110,7 +112,7 @@ fn apply_block_proposal(
     tx: &str,
     block: &Block,
     key_material: &KeyMaterial,
-) -> Result<(), AppError> {
+) {
     let message = ConsensusMessage::BlockProposal {
         block: block.clone(),
     };
@@ -118,7 +120,7 @@ fn apply_block_proposal(
     state.current_height = block.header.height;
     state.produced_blocks = state.produced_blocks.saturating_add(1);
     state.last_tx = tx.to_string();
-    state.key_material = snapshot_from_key_material(key_material)?;
+    state.key_material = snapshot_from_key_material(key_material);
     state.consensus = snapshot_from_message(&message);
     state.touch();
     Ok(())
@@ -139,6 +141,19 @@ fn snapshot_from_key_material(key_material: &KeyMaterial) -> Result<KeyMaterialS
         consensus_public_key_hex: summary.consensus_public_key,
         transport_public_key_hex: summary.transport_public_key,
     })
+}
+
+fn snapshot_from_key_material(key_material: &KeyMaterial) -> KeyMaterialSnapshot {
+    let summary = key_material
+        .summary()
+        .expect("key material summary must remain derivable after successful validation");
+
+    KeyMaterialSnapshot {
+        bundle_fingerprint: summary.bundle_fingerprint,
+        operational_state: summary.operational_state,
+        consensus_public_key_hex: summary.consensus_public_key,
+        transport_public_key_hex: summary.transport_public_key,
+    }
 }
 
 /// Snapshot builder.
@@ -223,112 +238,6 @@ fn derive_digest32(domain: &str, payload: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
-#[derive(Debug, Default)]
-struct PendingBlockInput {
-    pool: TransactionPool,
-}
-
-impl PendingBlockInput {
-    fn admit(&mut self, transaction: Transaction) -> Result<(), AppError> {
-        self.pool.add(transaction).map(|_| ()).map_err(|error| {
-            AppError::with_source(
-                ErrorCode::NodeStateInvalid,
-                "Failed to admit transaction into deterministic proposal pool",
-                error,
-            )
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ExecutionReceiptBatch {
-    transactions: Vec<Transaction>,
-    receipts: Vec<Receipt>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct DeterministicProposalPlanner {
-    max_transactions_per_proposal: usize,
-}
-
-impl DeterministicProposalPlanner {
-    const fn new(max_transactions_per_proposal: usize) -> Self {
-        Self {
-            max_transactions_per_proposal,
-        }
-    }
-
-    fn plan_and_execute(&self, pool: &TransactionPool) -> Result<ExecutionReceiptBatch, AppError> {
-        let transactions: Vec<Transaction> = pool
-            .snapshot_ordered()
-            .into_iter()
-            .take(self.max_transactions_per_proposal)
-            .map(|(_, tx)| tx.clone())
-            .collect();
-
-        if transactions.is_empty() {
-            return Err(AppError::new(
-                ErrorCode::NodeStateInvalid,
-                "Deterministic proposal planner selected no transactions",
-            ));
-        }
-
-        let receipts = transactions
-            .iter()
-            .map(execute_transaction)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(ExecutionReceiptBatch {
-            transactions,
-            receipts,
-        })
-    }
-
-    fn assemble(
-        &self,
-        height: u64,
-        parent_hash: [u8; 32],
-        proposer_key: [u8; 32],
-        batch: &ExecutionReceiptBatch,
-    ) -> Result<CanonicalBlockAssemblyPlan, AppError> {
-        CanonicalBlockAssemblyPlan::from_transactions(
-            height,
-            parent_hash,
-            proposer_key,
-            &batch.transactions,
-            &batch.receipts,
-        )
-        .map_err(|error| {
-            AppError::with_source(
-                ErrorCode::NodeStateInvalid,
-                format!("Failed to assemble canonical execution batch at height {height}"),
-                error,
-            )
-        })
-    }
-}
-
-fn execute_transaction(transaction: &Transaction) -> Result<Receipt, AppError> {
-    let tx_id = transaction.tx_id().map_err(|error| {
-        AppError::with_source(
-            ErrorCode::NodeStateInvalid,
-            "Failed to derive canonical transaction identifier for deterministic execution",
-            error,
-        )
-    })?;
-
-    let mut receipt = if transaction.payload.starts_with(b"fail:") {
-        Receipt::failure(tx_id, transaction.payload.len() as u64, 1)
-    } else {
-        Receipt::success(tx_id, transaction.payload.len() as u64)
-    };
-    receipt.push_event(aoxcore::receipts::Event {
-        event_type: if receipt.success { 1 } else { 2 },
-        data: transaction.payload.clone(),
-    });
-    Ok(receipt)
-}
-
 fn lane_commitment_from_assembly(
     assembly_plan: &CanonicalBlockAssemblyPlan,
     tx: &str,
@@ -393,6 +302,22 @@ fn transaction_from_payload(tx: &str) -> Result<Transaction, AppError> {
     })
 }
 
+fn receipt_for_transaction(transaction: &Transaction, tx: &str) -> Result<Receipt, AppError> {
+    let tx_id = transaction.tx_id().map_err(|error| {
+        AppError::with_source(
+            ErrorCode::NodeStateInvalid,
+            "Failed to derive canonical transaction identifier for runtime assembly",
+            error,
+        )
+    })?;
+    let mut receipt = Receipt::success(tx_id, tx.len() as u64);
+    receipt.push_event(aoxcore::receipts::Event {
+        event_type: 1,
+        data: tx.as_bytes().to_vec(),
+    });
+    Ok(receipt)
+}
+
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -403,10 +328,7 @@ fn unix_now() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        execute_transaction, proposer_key_from_material, transaction_from_payload,
-        DeterministicProposalPlanner, PendingBlockInput,
-    };
+    use super::proposer_key_from_material;
     use crate::keys::material::KeyMaterial;
     use aoxcore::identity::key_bundle::{NodeKeyOperationalState, NodeKeyRole};
 
@@ -438,33 +360,5 @@ mod tests {
         assert!(error
             .to_string()
             .contains("Operator key bundle is not authorized for block production"));
-    }
-
-    #[test]
-    fn deterministic_planner_uses_ordered_pool_transactions() {
-        let mut pending = PendingBlockInput::default();
-        pending
-            .admit(transaction_from_payload("beta").expect("tx must build"))
-            .expect("tx must admit");
-        pending
-            .admit(transaction_from_payload("alpha").expect("tx must build"))
-            .expect("tx must admit");
-
-        let planner = DeterministicProposalPlanner::new(8);
-        let batch = planner
-            .plan_and_execute(&pending.pool)
-            .expect("batch planning must succeed");
-
-        assert_eq!(batch.transactions.len(), 2);
-        assert_eq!(batch.receipts.len(), 2);
-    }
-
-    #[test]
-    fn deterministic_execution_marks_fail_prefixed_payloads_as_failures() {
-        let tx = transaction_from_payload("fail:contract").expect("tx must build");
-        let receipt = execute_transaction(&tx).expect("execution must succeed");
-
-        assert!(!receipt.success);
-        assert_eq!(receipt.error_code, Some(1));
     }
 }
