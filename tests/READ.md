@@ -1,8 +1,8 @@
-# AOX Chain Workspace - Audit Roadmap
+# Integration Tests - Audit Roadmap
 
 **System Version Baseline:** `aoxc.v.0.0.0-alpha.1`
 
-Root governance, release, and audit boundary for the entire AOX Chain system.
+Cross-workspace verification roadmap for end-to-end and adversarial evidence.
 
 ## Production Intent
 This document defines the mandatory roadmap for advancing the covered workspace area toward a 99.99% production-grade security and reliability posture. It must be updated whenever a release, binary, interface, or operational assumption changes.
