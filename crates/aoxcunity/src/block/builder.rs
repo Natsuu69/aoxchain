@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::block::hash::{canonical_section_sort_key, compute_block_hash, compute_body_roots};
+use crate::block::semantic::validate_block_semantics;
 use crate::block::types::{
     BLOCK_VERSION_V1, Block, BlockBody, BlockBuildError, BlockHeader, BlockSection,
     PostQuantumSection, TimeSealSection,

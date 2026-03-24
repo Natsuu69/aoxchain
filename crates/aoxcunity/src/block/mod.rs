@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod hash;
+pub mod semantic;
 pub mod types;
 
 pub use builder::BlockBuilder;
