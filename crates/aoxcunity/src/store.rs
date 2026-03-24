@@ -193,7 +193,7 @@ mod tests {
             [6u8; 32],
             vec![[7u8; 32]],
         );
-        let continuity = ContinuityCertificate::new([8u8; 32], 2, 3, 4, 3, 1, vec![[7u8; 32]]);
+        let continuity = ContinuityCertificate::new([8u8; 32], 2, 3, 4, 4, 1, vec![[7u8; 32]]);
         let seal = ConstitutionalSeal::compose(&execution, &legitimacy, &continuity).unwrap();
         store.store_finalized_seal(seal.clone()).unwrap();
 
