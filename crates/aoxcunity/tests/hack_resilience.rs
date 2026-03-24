@@ -171,7 +171,7 @@ fn hack_test_rejects_stale_vote_after_finalization() -> Result<(), ConsensusErro
     assert!(state.try_finalize(child.hash, child.header.round).is_some());
     assert!(matches!(
         state.add_vote(vote([4; 32], &genesis, VoteKind::Commit)),
-        Err(ConsensusError::StaleVote)
+        Err(ConsensusError::VoteForUnknownBlock)
     ));
     Ok(())
 }

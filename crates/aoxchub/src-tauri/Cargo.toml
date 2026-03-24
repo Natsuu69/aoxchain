@@ -1,25 +1,43 @@
 [package]
-name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+name = "aoxchub"
+version = "0.1.1"
+description = "AOXChain Control Center & Hub"
+authors = ["orcun"]
 edition = "2021"
 rust-version = "1.77.2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-name = "app_lib"
+name = "aoxchub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.5.6" }
+tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
-serde_json = "1.0"
+# Tauri v2 core dependency with a deliberately minimal feature surface.
+tauri = { version = "2.10.3", features = [] }
+
+# Official plugins used by the desktop control plane.
+tauri-plugin-log = "2.8.0"
+tauri-plugin-shell = "2.3.5"
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Internal workspace crates
+aoxcore = { path = "../../aoxcore" }
+aoxcai = { path = "../../aoxcai" }
+aoxcrpc = { path = "../../aoxcrpc" }
+aoxcvm = { path = "../../aoxcvm" }
+aoxclibs = { path = "../../aoxclibs" }
+aoxcmd = { path = "../../aoxcmd" }
+
+# Async runtime and diagnostics
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 log = "0.4"
-tauri = { version = "2.10.3" }
-tauri-plugin-log = "2"
+tracing = "0.1"
+
+[features]
+# Enables the custom protocol required by packaged desktop builds.
+custom-protocol = ["tauri/custom-protocol"]

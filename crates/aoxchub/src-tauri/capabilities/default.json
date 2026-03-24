@@ -1,11 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "enables the default permissions",
+  "identifier": "main-capability",
+  "description": "Primary desktop capability set for AOX Hub.",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "shell:allow-open",
+    "log:default"
   ]
 }

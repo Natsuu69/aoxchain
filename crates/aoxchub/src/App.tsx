@@ -2,7 +2,29 @@ import { useEffect, useMemo, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import './App.css'
 
-type Status = 'ready' | 'in-progress' | 'blocked' | 'online' | 'degraded' | 'offline' | 'connected' | 'attention' | 'locked' | 'collecting' | 'queued'
+type Status =
+  | 'ready'
+  | 'in-progress'
+  | 'blocked'
+  | 'online'
+  | 'degraded'
+  | 'offline'
+  | 'connected'
+  | 'attention'
+  | 'locked'
+  | 'collecting'
+  | 'queued'
+
+type SectionKey =
+  | 'overview'
+  | 'mission-control'
+  | 'security'
+  | 'nodes'
+  | 'wallets'
+  | 'telemetry'
+  | 'integrations'
+  | 'reports'
+  | 'evidence'
 
 type LaunchSnapshot = {
   stage: string
@@ -19,6 +41,8 @@ type LaunchSnapshot = {
   telemetry: TelemetrySurface[]
   reports: ReportAsset[]
   commands: CommandPreset[]
+  workspaces?: WorkspaceSurface[]
+  aiSurfaces?: AiSurface[]
 }
 
 type Track = {
@@ -88,6 +112,22 @@ type CommandPreset = {
   intent: string
 }
 
+type WorkspaceSurface = {
+  name: string
+  path: string
+  category: string
+  status: string
+  summary: string
+}
+
+type AiSurface = {
+  name: string
+  area: string
+  status: string
+  summary: string
+  command: string
+}
+
 type MissionTile = {
   title: string
   value: string
@@ -122,12 +162,13 @@ const fallbackSnapshot: LaunchSnapshot = {
   verdict: 'Needs operator closure',
   overallPercent: 68,
   profile: 'aoxhub.desktop.admin',
-  summary: 'AOXHub masaüstü omurgası; node, wallet, telemetry, audit ve release kanıtlarını tek kontrol merkezinde toplar.',
+  summary:
+    'AOXHub masaüstü omurgası; node, wallet, telemetry, audit ve release kanıtlarını tek kontrol merkezinde toplar.',
   tracks: [
     {
       name: 'Mainnet readiness',
       percent: 60,
-      summary: 'Production kontrollleri ve release kanıtları kapanmalı.',
+      summary: 'Production kontrolleri ve release kanıtları kapanmalı.',
       status: 'in-progress',
     },
     {
@@ -175,7 +216,8 @@ const fallbackSnapshot: LaunchSnapshot = {
       rpcAddr: '127.0.0.1:8545',
       peerCount: 2,
       securityMode: 'release_guarded',
-      command: 'cargo run -q -p aoxcmd -- node-run --home configs/deterministic-testnet/homes/atlas --rounds 12 --sleep-ms 200',
+      command:
+        'cargo run -q -p aoxcmd -- node-run --home configs/deterministic-testnet/homes/atlas --rounds 12 --sleep-ms 200',
     },
     {
       id: 'boreal',
@@ -186,7 +228,8 @@ const fallbackSnapshot: LaunchSnapshot = {
       rpcAddr: '127.0.0.1:8546',
       peerCount: 2,
       securityMode: 'release_guarded',
-      command: 'cargo run -q -p aoxcmd -- node-run --home configs/deterministic-testnet/homes/boreal --rounds 12 --sleep-ms 200',
+      command:
+        'cargo run -q -p aoxcmd -- node-run --home configs/deterministic-testnet/homes/boreal --rounds 12 --sleep-ms 200',
     },
     {
       id: 'cypher',
@@ -197,7 +240,8 @@ const fallbackSnapshot: LaunchSnapshot = {
       rpcAddr: '127.0.0.1:9545',
       peerCount: 2,
       securityMode: 'test_fixture',
-      command: 'cargo run -q -p aoxcmd -- node-run --home configs/deterministic-testnet/homes/cypher --rounds 12 --sleep-ms 200',
+      command:
+        'cargo run -q -p aoxcmd -- node-run --home configs/deterministic-testnet/homes/cypher --rounds 12 --sleep-ms 200',
     },
   ],
   wallets: [
@@ -216,6 +260,14 @@ const fallbackSnapshot: LaunchSnapshot = {
       addressHint: 'AOXC1-TREASURY-DESKTOP',
       command: 'aoxc wallet inspect --profile mainnet',
       detail: 'Transfer öncesi policy, approval ve export görünürlüğü ister.',
+    },
+    {
+      title: 'Recovery wallet',
+      route: 'offline recovery lane',
+      status: 'locked',
+      addressHint: 'AOXC1-RECOVERY-ESCROW',
+      command: 'aoxc diagnostics-bundle --redact',
+      detail: 'Disaster recovery, key rotation ve cold-path verification lane.',
     },
   ],
   telemetry: [
@@ -258,18 +310,20 @@ const fallbackSnapshot: LaunchSnapshot = {
       intent: 'Release veya transfer öncesi audit yüzeyini yeniler.',
     },
   ],
+  workspaces: [],
+  aiSurfaces: [],
 }
 
-const navItems = [
-  'Overview',
-  'Mission control',
-  'Security',
-  'Nodes',
-  'Wallets',
-  'Telemetry',
-  'Integrations',
-  'Reports',
-  'Evidence',
+const navigation: { key: SectionKey; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'mission-control', label: 'Mission control' },
+  { key: 'security', label: 'Security' },
+  { key: 'nodes', label: 'Nodes' },
+  { key: 'wallets', label: 'Wallets' },
+  { key: 'telemetry', label: 'Telemetry' },
+  { key: 'integrations', label: 'Integrations' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'evidence', label: 'Evidence' },
 ]
 
 function statusLabel(status: Status) {
@@ -314,6 +368,7 @@ function statusTone(status: Status) {
 function App() {
   const [snapshot, setSnapshot] = useState<LaunchSnapshot>(fallbackSnapshot)
   const [error, setError] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState<SectionKey>('overview')
 
   useEffect(() => {
     invoke<LaunchSnapshot>('load_control_center_snapshot')
@@ -448,6 +503,391 @@ function App() {
     return events
   }, [snapshot])
 
+  function renderOverview() {
+    return (
+      <>
+        <section className="mission-grid">
+          {missionTiles.map((tile) => (
+            <article className="metric-card panel-surface" key={tile.title}>
+              <div className="card-topline">
+                <span>{tile.title}</span>
+                <span className={`status-pill ${tile.status}`}>{statusLabel(tile.status)}</span>
+              </div>
+              <strong>{tile.value}</strong>
+              <p>{tile.detail}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="dashboard-grid two-col">
+          <article className="panel-surface section-card">
+            <div className="section-heading">
+              <h2>Readiness tracks</h2>
+              <p>Desktop, mainnet ve testnet eksenleri ayrı ayrı izlenir.</p>
+            </div>
+            <div className="stack-list">
+              {snapshot.tracks.map((track) => (
+                <article className="info-card compact" key={track.name}>
+                  <div className="card-topline">
+                    <h3>{track.name}</h3>
+                    <span className={`status-pill ${track.status}`}>{statusLabel(track.status as Status)}</span>
+                  </div>
+                  <strong className="percent">{track.percent}%</strong>
+                  <p>{track.summary}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel-surface section-card">
+            <div className="section-heading">
+              <h2>Live operator stream</h2>
+              <p>Blocker, telemetry ve rapor olayları birleşik operatör akışı gibi listelenir.</p>
+            </div>
+            <div className="timeline-list">
+              {streamEvents.map((event) => (
+                <article className={`timeline-item ${event.severity}`} key={`${event.time}-${event.title}`}>
+                  <span>{event.time}</span>
+                  <strong>{event.title}</strong>
+                  <p>{event.detail}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+        </section>
+      </>
+    )
+  }
+
+  function renderMissionControl() {
+    return (
+      <section className="dashboard-grid two-col">
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Open blockers</h2>
+            <p>Kapanması gereken release ve operator aksiyonları.</p>
+          </div>
+          <div className="stack-list">
+            {snapshot.blockers.map((blocker) => (
+              <article className="info-card compact" key={blocker.title}>
+                <div className="card-topline">
+                  <h3>{blocker.title}</h3>
+                  <span className="status-pill blocked">Blocked</span>
+                </div>
+                <p>{blocker.detail}</p>
+                <code>{blocker.command}</code>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Command presets</h2>
+            <p>Desktop arayüzde hızlı operasyon için güvenli komut kaseti.</p>
+          </div>
+          <div className="stack-list">
+            {snapshot.commands.map((command) => (
+              <article className="info-card compact" key={command.title}>
+                <div className="card-topline">
+                  <h3>{command.title}</h3>
+                  <span className="status-pill ready">Preset</span>
+                </div>
+                <p>{command.intent}</p>
+                <code>{command.command}</code>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+    )
+  }
+
+  function renderSecurity() {
+    return (
+      <section className="dashboard-grid two-col">
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Security guardrails</h2>
+            <p>Ultra güvenli masaüstü akışı için temel koruma katmanları.</p>
+          </div>
+          <div className="stack-list">
+            {securityGuardrails.map((guardrail) => (
+              <article className="info-card compact" key={guardrail.title}>
+                <div className="card-topline">
+                  <h3>{guardrail.title}</h3>
+                  <span className={`status-pill ${guardrail.status}`}>{statusLabel(guardrail.status)}</span>
+                </div>
+                <strong className="percent">{guardrail.value}</strong>
+                <p>{guardrail.detail}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Area readiness</h2>
+            <p>Çekirdek alanlar yüzde ve açıklama ile görünür tutulur.</p>
+          </div>
+          <div className="stack-list">
+            {snapshot.areas.map((area) => (
+              <article className="info-card compact" key={area.name}>
+                <div className="card-topline">
+                  <h3>{area.name}</h3>
+                  <span className={`status-pill ${area.status}`}>{statusLabel(area.status)}</span>
+                </div>
+                <strong className="percent">{area.percent}%</strong>
+                <p>{area.detail}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+    )
+  }
+
+  function renderNodes() {
+    return (
+      <section className="panel-surface section-card">
+        <div className="section-heading">
+          <h2>Fleet orchestration</h2>
+          <p>Node komutları, ağ yüzeyleri ve güvenlik modları gerçek snapshot üzerinden gösterilir.</p>
+        </div>
+        <div className="stack-list">
+          {snapshot.nodes.map((node) => (
+            <article className="info-card compact" key={node.id}>
+              <div className="card-topline">
+                <div>
+                  <h3>{node.id}</h3>
+                  <p className="muted">{node.role}</p>
+                </div>
+                <span className={`status-pill ${statusTone(node.status)}`}>{statusLabel(node.status)}</span>
+              </div>
+              <dl className="detail-grid">
+                <div><dt>Chain</dt><dd>{node.chainId}</dd></div>
+                <div><dt>Listen</dt><dd>{node.listenAddr}</dd></div>
+                <div><dt>RPC</dt><dd>{node.rpcAddr}</dd></div>
+                <div><dt>Peers</dt><dd>{node.peerCount}</dd></div>
+                <div><dt>Security</dt><dd>{node.securityMode}</dd></div>
+              </dl>
+              <code>{node.command}</code>
+            </article>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  function renderWallets() {
+    return (
+      <section className="panel-surface section-card">
+        <div className="section-heading">
+          <h2>Wallet authority center</h2>
+          <p>Operatör, treasury ve recovery lane komutları ve rotalarıyla birlikte izlenir.</p>
+        </div>
+        <div className="stack-list">
+          {snapshot.wallets.map((wallet) => (
+            <article className="info-card compact" key={wallet.title}>
+              <div className="card-topline">
+                <h3>{wallet.title}</h3>
+                <span className={`status-pill ${statusTone(wallet.status)}`}>{statusLabel(wallet.status)}</span>
+              </div>
+              <p>{wallet.detail}</p>
+              <dl className="detail-grid">
+                <div><dt>Route</dt><dd>{wallet.route}</dd></div>
+                <div><dt>Address</dt><dd>{wallet.addressHint}</dd></div>
+              </dl>
+              <code>{wallet.command}</code>
+            </article>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  function renderTelemetry() {
+    return (
+      <section className="panel-surface section-card">
+        <div className="section-heading">
+          <h2>Telemetry surfaces</h2>
+          <p>Runtime ve observability yüzeyleri ayrı operatör panelinde gösterilir.</p>
+        </div>
+        <div className="stack-list">
+          {snapshot.telemetry.map((item) => (
+            <article className="info-card compact" key={item.title}>
+              <div className="card-topline">
+                <h3>{item.title}</h3>
+                <span className={`status-pill ${statusTone(item.status)}`}>{statusLabel(item.status)}</span>
+              </div>
+              <p>{item.detail}</p>
+              <code>{item.target}</code>
+            </article>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  function renderIntegrations() {
+    return (
+      <section className="dashboard-grid two-col">
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>System integrations</h2>
+            <p>Tüm sistemle entegre çalışan yüzeylerin owner ve endpoint görünürlüğü.</p>
+          </div>
+          <div className="stack-list">
+            {integrationLanes.map((lane) => (
+              <article className="info-card compact" key={`${lane.title}-${lane.endpoint}`}>
+                <div className="card-topline">
+                  <h3>{lane.title}</h3>
+                  <span className={`status-pill ${lane.status}`}>{statusLabel(lane.status)}</span>
+                </div>
+                <dl className="detail-grid single-line">
+                  <div><dt>Owner</dt><dd>{lane.owner}</dd></div>
+                  <div><dt>Endpoint</dt><dd>{lane.endpoint}</dd></div>
+                </dl>
+                <p>{lane.detail}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Workspace surfaces</h2>
+            <p>AOXChain workspace bileşenleri ve görev sınıfları.</p>
+          </div>
+          <div className="stack-list">
+            {(snapshot.workspaces ?? []).map((workspace) => (
+              <article className="info-card compact" key={`${workspace.name}-${workspace.path}`}>
+                <div className="card-topline">
+                  <h3>{workspace.name}</h3>
+                  <span className="status-pill in-progress">{workspace.status}</span>
+                </div>
+                <p>{workspace.summary}</p>
+                <code>{workspace.path}</code>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+    )
+  }
+
+  function renderReports() {
+    return (
+      <section className="dashboard-grid two-col">
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Reporting & exports</h2>
+            <p>Audit, readiness ve closure çıktılarını profesyonel operatör görünümünde toplar.</p>
+          </div>
+          <div className="stack-list">
+            {snapshot.reports.map((report) => (
+              <article className="info-card compact" key={report.title}>
+                <div className="card-topline">
+                  <h3>{report.title}</h3>
+                  <span className={`status-pill ${statusTone(report.status)}`}>{statusLabel(report.status)}</span>
+                </div>
+                <p>{report.detail}</p>
+                <code>{report.path}</code>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>AI surfaces</h2>
+            <p>Desktop control plane tarafından görülen AI yüzeyleri.</p>
+          </div>
+          <div className="stack-list">
+            {(snapshot.aiSurfaces ?? []).map((surface) => (
+              <article className="info-card compact" key={`${surface.name}-${surface.area}`}>
+                <div className="card-topline">
+                  <h3>{surface.name}</h3>
+                  <span className="status-pill in-progress">{surface.status}</span>
+                </div>
+                <p>{surface.summary}</p>
+                <code>{surface.command}</code>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+    )
+  }
+
+  function renderEvidence() {
+    return (
+      <section className="dashboard-grid two-col">
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Evidence registry</h2>
+            <p>Operasyonun güvenli release alabilmesi için gerekli dosya izi.</p>
+          </div>
+          <div className="stack-list">
+            {snapshot.files.map((file) => (
+              <article className="info-card compact" key={file.path}>
+                <div className="card-topline">
+                  <h3>{file.label}</h3>
+                  <span className={`status-pill ${file.exists ? 'ready' : 'blocked'}`}>
+                    {file.exists ? 'Ready' : 'Missing'}
+                  </span>
+                </div>
+                <code>{file.path}</code>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-surface section-card">
+          <div className="section-heading">
+            <h2>Operator actions</h2>
+            <p>Desktop panelden beklenen en kritik güvenli aksiyonlar.</p>
+          </div>
+          <div className="action-grid">
+            {snapshot.commands.map((command) => (
+              <button className="action-tile" type="button" key={command.title}>
+                <strong>{command.title}</strong>
+                <span>{command.intent}</span>
+              </button>
+            ))}
+          </div>
+        </article>
+      </section>
+    )
+  }
+
+  function renderActiveSection() {
+    switch (activeSection) {
+      case 'overview':
+        return renderOverview()
+      case 'mission-control':
+        return renderMissionControl()
+      case 'security':
+        return renderSecurity()
+      case 'nodes':
+        return renderNodes()
+      case 'wallets':
+        return renderWallets()
+      case 'telemetry':
+        return renderTelemetry()
+      case 'integrations':
+        return renderIntegrations()
+      case 'reports':
+        return renderReports()
+      case 'evidence':
+        return renderEvidence()
+      default:
+        return renderOverview()
+    }
+  }
+
+  const activeLabel = navigation.find((item) => item.key === activeSection)?.label ?? 'Overview'
+
   return (
     <div className="desktop-shell">
       <aside className="sidebar-shell">
@@ -460,9 +900,15 @@ function App() {
         <nav className="nav-panel panel-surface">
           <h2>Control lanes</h2>
           <ul className="nav-list">
-            {navItems.map((item) => (
-              <li key={item}>
-                <button type="button">{item}</button>
+            {navigation.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  className={activeSection === item.key ? 'active' : ''}
+                  onClick={() => setActiveSection(item.key)}
+                >
+                  {item.label}
+                </button>
               </li>
             ))}
           </ul>
@@ -488,7 +934,7 @@ function App() {
         <section className="topbar panel-surface">
           <div>
             <span className="eyebrow subtle">{snapshot.profile}</span>
-            <h2>Tüm sistemi tek noktadan yöneten tam entegre desktop operator plane</h2>
+            <h2>{activeLabel}</h2>
             <p>{snapshot.summary}</p>
           </div>
           <div className="topbar-badges">
@@ -498,269 +944,17 @@ function App() {
           </div>
         </section>
 
-        <section className="mission-grid">
-          {missionTiles.map((tile) => (
-            <article className="metric-card panel-surface" key={tile.title}>
-              <div className="card-topline">
-                <span>{tile.title}</span>
-                <span className={`status-pill ${tile.status}`}>{statusLabel(tile.status)}</span>
-              </div>
-              <strong>{tile.value}</strong>
-              <p>{tile.detail}</p>
-            </article>
-          ))}
-        </section>
-
-        <section className="hero-command panel-surface">
-          <div className="hero-command-copy">
-            <span className="eyebrow">Mission control</span>
-            <h2>Gerçek repo verileriyle beslenen güvenli node + wallet + telemetry + evidence kokpiti</h2>
-            <p>
-              Bu yüzey sadece görsel bir dashboard değil; doğrudan AOXChain repo durumundan snapshot çekip komut presetleri,
-              güvenlik katmanları, node erişim yüzeyleri ve kanıt envanteriyle birleşik bir operator experience sunar.
-            </p>
-            {error ? <p className="callout warning">Tauri snapshot alınamadı, fallback veri gösteriliyor: {error}</p> : null}
-            <div className="command-strip">
-              {snapshot.commands.map((item) => (
-                <article key={item.title} className="command-card">
-                  <span>{item.title}</span>
-                  <code>{item.command}</code>
-                  <small>{item.intent}</small>
-                </article>
-              ))}
-            </div>
-          </div>
-          <div className="hero-side-grid">
-            <article className="focus-card panel-surface">
-              <span className="muted">Primary objective</span>
-              <strong>Mainnet, cüzdan yönetişimi, audit ve kanıt akışlarını operatör için tek profesyonel masaüstü yüzeyinde toplamak</strong>
-            </article>
-            <article className="focus-card panel-surface">
-              <span className="muted">Open blockers</span>
-              <ul className="bullet-list">
-                {snapshot.blockers.map((blocker) => (
-                  <li key={blocker.title}>
-                    <strong>{blocker.title}</strong>
-                    <span>{blocker.detail}</span>
-                    <code>{blocker.command}</code>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </div>
-        </section>
-
-        <section className="dashboard-grid three-col">
-          <article className="panel-surface section-card">
+        {error ? (
+          <section className="panel-surface section-card">
             <div className="section-heading">
-              <h2>Security guardrails</h2>
-              <p>Ultra güvenli masaüstü akışı için temel koruma katmanları.</p>
+              <h2>Snapshot fallback state</h2>
+              <p>Repo snapshot okunamadığı için fallback veri gösteriliyor.</p>
             </div>
-            <div className="stack-list">
-              {securityGuardrails.map((guardrail) => (
-                <article className="info-card compact" key={guardrail.title}>
-                  <div className="card-topline">
-                    <h3>{guardrail.title}</h3>
-                    <span className={`status-pill ${guardrail.status}`}>{statusLabel(guardrail.status)}</span>
-                  </div>
-                  <strong className="percent">{guardrail.value}</strong>
-                  <p>{guardrail.detail}</p>
-                </article>
-              ))}
-            </div>
-          </article>
+            <p className="callout warning">{error}</p>
+          </section>
+        ) : null}
 
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Area readiness</h2>
-              <p>Çekirdek alanlar yüzde ve açıklama ile görünür tutulur.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.areas.map((area) => (
-                <article className="info-card compact" key={area.name}>
-                  <div className="card-topline">
-                    <h3>{area.name}</h3>
-                    <span className={`status-pill ${area.status}`}>{statusLabel(area.status)}</span>
-                  </div>
-                  <strong className="percent">{area.percent}%</strong>
-                  <p>{area.detail}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Live operator stream</h2>
-              <p>Blocker, telemetry ve rapor olayları birleşik operatör akışı gibi listelenir.</p>
-            </div>
-            <div className="timeline-list">
-              {streamEvents.map((event) => (
-                <article className={`timeline-item ${event.severity}`} key={`${event.time}-${event.title}`}>
-                  <span>{event.time}</span>
-                  <strong>{event.title}</strong>
-                  <p>{event.detail}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-        </section>
-
-        <section className="dashboard-grid two-col">
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Fleet orchestration</h2>
-              <p>Node komutları, ağ yüzeyleri ve güvenlik modları gerçek snapshot üzerinden gösterilir.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.nodes.map((node) => (
-                <article className="info-card compact" key={node.id}>
-                  <div className="card-topline">
-                    <div>
-                      <h3>{node.id}</h3>
-                      <p className="muted">{node.role}</p>
-                    </div>
-                    <span className={`status-pill ${statusTone(node.status)}`}>{statusLabel(node.status)}</span>
-                  </div>
-                  <dl className="detail-grid">
-                    <div><dt>Chain</dt><dd>{node.chainId}</dd></div>
-                    <div><dt>Listen</dt><dd>{node.listenAddr}</dd></div>
-                    <div><dt>RPC</dt><dd>{node.rpcAddr}</dd></div>
-                    <div><dt>Peers</dt><dd>{node.peerCount}</dd></div>
-                    <div><dt>Security</dt><dd>{node.securityMode}</dd></div>
-                  </dl>
-                  <code>{node.command}</code>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Wallet authority center</h2>
-              <p>Operatör, treasury ve recovery lane komutları ve rotalarıyla birlikte izlenir.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.wallets.map((wallet) => (
-                <article className="info-card compact" key={wallet.title}>
-                  <div className="card-topline">
-                    <h3>{wallet.title}</h3>
-                    <span className={`status-pill ${statusTone(wallet.status)}`}>{statusLabel(wallet.status)}</span>
-                  </div>
-                  <p>{wallet.detail}</p>
-                  <dl className="detail-grid">
-                    <div><dt>Route</dt><dd>{wallet.route}</dd></div>
-                    <div><dt>Address</dt><dd>{wallet.addressHint}</dd></div>
-                  </dl>
-                  <code>{wallet.command}</code>
-                </article>
-              ))}
-            </div>
-          </article>
-        </section>
-
-        <section className="dashboard-grid three-col">
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Readiness tracks</h2>
-              <p>Desktop, mainnet ve testnet eksenleri ayrı ayrı izlenir.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.tracks.map((track) => (
-                <article className="info-card compact" key={track.name}>
-                  <div className="card-topline">
-                    <h3>{track.name}</h3>
-                    <span className={`status-pill ${track.status}`}>{statusLabel(track.status)}</span>
-                  </div>
-                  <strong className="percent">{track.percent}%</strong>
-                  <p>{track.summary}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>System integrations</h2>
-              <p>Tüm sistemle entegre çalışan yüzeylerin owner ve endpoint görünürlüğü.</p>
-            </div>
-            <div className="stack-list">
-              {integrationLanes.map((lane) => (
-                <article className="info-card compact" key={`${lane.title}-${lane.endpoint}`}>
-                  <div className="card-topline">
-                    <h3>{lane.title}</h3>
-                    <span className={`status-pill ${lane.status}`}>{statusLabel(lane.status)}</span>
-                  </div>
-                  <dl className="detail-grid single-line">
-                    <div><dt>Owner</dt><dd>{lane.owner}</dd></div>
-                    <div><dt>Endpoint</dt><dd>{lane.endpoint}</dd></div>
-                  </dl>
-                  <p>{lane.detail}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Evidence registry</h2>
-              <p>Operasyonun güvenli release alabilmesi için gerekli dosya izi.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.files.map((file) => (
-                <article className="info-card compact" key={file.path}>
-                  <div className="card-topline">
-                    <h3>{file.label}</h3>
-                    <span className={`status-pill ${file.exists ? 'ready' : 'blocked'}`}>
-                      {file.exists ? 'Ready' : 'Missing'}
-                    </span>
-                  </div>
-                  <code>{file.path}</code>
-                </article>
-              ))}
-            </div>
-          </article>
-        </section>
-
-        <section className="dashboard-grid two-col">
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Reporting & exports</h2>
-              <p>Audit, readiness ve closure çıktılarını profesyonel operatör görünümünde toplar.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.reports.map((report) => (
-                <article className="info-card compact" key={report.title}>
-                  <div className="card-topline">
-                    <h3>{report.title}</h3>
-                    <span className={`status-pill ${statusTone(report.status)}`}>{statusLabel(report.status)}</span>
-                  </div>
-                  <p>{report.detail}</p>
-                  <code>{report.path}</code>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-surface section-card">
-            <div className="section-heading">
-              <h2>Command presets</h2>
-              <p>Desktop arayüzde hızlı operasyon için güvenli komut kaseti.</p>
-            </div>
-            <div className="stack-list">
-              {snapshot.commands.map((command) => (
-                <article className="info-card compact" key={command.title}>
-                  <div className="card-topline">
-                    <h3>{command.title}</h3>
-                    <span className="status-pill ready">Preset</span>
-                  </div>
-                  <p>{command.intent}</p>
-                  <code>{command.command}</code>
-                </article>
-              ))}
-            </div>
-          </article>
-        </section>
+        {renderActiveSection()}
       </main>
     </div>
   )

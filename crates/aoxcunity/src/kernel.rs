@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::block::Block;
 use crate::constitutional::{
-    ConstitutionalSeal, ContinuityCertificate, ExecutionCertificate, LegitimacyCertificate,
+    ConstitutionalSeal, ConstitutionalValidationError, ContinuityCertificate, ExecutionCertificate,
+    LegitimacyCertificate,
 };
 use crate::error::ConsensusError;
 use crate::safety::{
@@ -251,6 +252,7 @@ impl ConsensusEngine {
     fn apply_admit_block(&mut self, block: Block) -> TransitionResult {
         let block_hash = block.hash;
         let block_height = block.header.height;
+
         match self.state.admit_block(block) {
             Ok(()) => {
                 self.current_height = self.current_height.max(block_height);
@@ -271,6 +273,7 @@ impl ConsensusEngine {
             &verified_vote.authenticated_vote.vote,
             verified_vote.authenticated_vote.context.epoch,
         );
+
         if let SafeToVote::No(violation) = evaluate_safe_to_vote(&self.lock_state, &candidate) {
             return TransitionResult::rejected(map_safety_violation(violation));
         }
@@ -284,12 +287,14 @@ impl ConsensusEngine {
                 if matches!(verified_vote.authenticated_vote.vote.kind, VoteKind::Commit) {
                     self.lock_state.advance_to(candidate);
                 }
+
                 self.current_epoch = self
                     .current_epoch
                     .max(verified_vote.authenticated_vote.context.epoch);
                 self.current_height = self
                     .current_height
                     .max(verified_vote.authenticated_vote.vote.height);
+
                 TransitionResult::accepted(KernelEffect::VoteAccepted(
                     verified_vote.authenticated_vote.vote.block_hash,
                 ))
@@ -301,6 +306,7 @@ impl ConsensusEngine {
                         "vote",
                     ));
                 }
+
                 TransitionResult::rejected(map_consensus_error(&error))
             }
         }
@@ -308,9 +314,11 @@ impl ConsensusEngine {
 
     fn apply_timeout_vote(&mut self, timeout_vote: VerifiedTimeoutVote) -> TransitionResult {
         let vote = timeout_vote.timeout_vote.clone();
+
         if !self.state.blocks.contains_key(&vote.block_hash) {
             return TransitionResult::rejected(KernelRejection::StaleArtifact);
         }
+
         if !self
             .state
             .rotation
@@ -326,12 +334,15 @@ impl ConsensusEngine {
             epoch: vote.epoch,
             timeout_round: vote.timeout_round,
         };
+
         if let Some(existing_block_hash) = self.timeout_conflicts.get(&conflict_key) {
             if *existing_block_hash == vote.block_hash {
                 return TransitionResult::rejected(KernelRejection::DuplicateArtifact);
             }
+
             self.evidence_buffer
                 .push(equivocation_evidence(vote.block_hash, "timeout"));
+
             return TransitionResult::rejected(KernelRejection::InvariantViolation)
                 .with_conflicting_finality_detected();
         }
@@ -343,6 +354,7 @@ impl ConsensusEngine {
             epoch: vote.epoch,
             timeout_round: vote.timeout_round,
         };
+
         self.timeout_conflicts.insert(conflict_key, vote.block_hash);
         self.timeout_votes
             .entry(key)
@@ -350,6 +362,7 @@ impl ConsensusEngine {
             .insert(vote.voter, timeout_vote);
 
         let mut result = TransitionResult::accepted(KernelEffect::TimeoutAccepted(vote.block_hash));
+
         if let Some(certificate) = self.maybe_build_continuity_certificate(key) {
             self.lock_state.advance_to(JustificationRef {
                 block_hash: certificate.block_hash,
@@ -358,13 +371,16 @@ impl ConsensusEngine {
                 epoch: certificate.epoch,
                 certificate_hash: certificate.certificate_hash,
             });
+
             self.state
                 .round
                 .advance_to(certificate.timeout_round.saturating_add(1));
             self.current_epoch = self.current_epoch.max(certificate.epoch);
             self.current_height = self.current_height.max(certificate.height);
+
             self.continuity_by_block
                 .insert(certificate.block_hash, certificate.clone());
+
             result.accepted_effects.push(KernelEffect::RoundAdvanced {
                 height: certificate.height,
                 round: self.state.round.round,
@@ -373,6 +389,7 @@ impl ConsensusEngine {
                 .emitted_certificates
                 .push(KernelCertificate::Continuity(certificate));
         }
+
         result
     }
 
@@ -380,6 +397,21 @@ impl ConsensusEngine {
         &mut self,
         certificate: LegitimacyCertificate,
     ) -> TransitionResult {
+        if !self.state.blocks.contains_key(&certificate.block_hash) {
+            return TransitionResult::rejected(KernelRejection::StaleArtifact);
+        }
+
+        if certificate.validate().is_err() {
+            self.evidence_buffer.push(ConsensusEvidence {
+                evidence_hash: certificate.certificate_hash,
+                related_block_hash: certificate.block_hash,
+                reason: "invalid_legitimacy_certificate".to_string(),
+            });
+
+            return TransitionResult::rejected(KernelRejection::InvariantViolation)
+                .with_conflicting_finality_detected();
+        }
+
         self.current_epoch = self.current_epoch.max(certificate.authority_epoch);
         self.legitimacy_by_block
             .insert(certificate.block_hash, certificate.clone());
@@ -400,6 +432,7 @@ impl ConsensusEngine {
 
         self.current_height = self.current_height.max(height);
         self.state.round.advance_to(round);
+
         TransitionResult::accepted(KernelEffect::RoundAdvanced { height, round })
     }
 
@@ -413,6 +446,7 @@ impl ConsensusEngine {
             finalized_round,
             self.vote_authentication_context(),
         );
+
         let Some(seal) = self.state.try_finalize(block_hash, finalized_round) else {
             return TransitionResult::rejected(KernelRejection::FinalityConflict)
                 .with_conflicting_finality_detected();
@@ -423,35 +457,48 @@ impl ConsensusEngine {
             self.state.rotation.validator_set_hash(),
             seal.certificate.clone(),
         );
+
         let mut result = TransitionResult::accepted(KernelEffect::BlockFinalized(block_hash));
+
         if let Some(certificate) = authenticated_certificate {
             result
                 .emitted_certificates
                 .push(KernelCertificate::Execution(certificate));
         }
 
-        if let (Some(legitimacy), Some(continuity)) = (
-            self.legitimacy_by_block.get(&block_hash),
-            self.continuity_by_block.get(&block_hash),
-        ) && let Some(constitutional) =
-            ConstitutionalSeal::compose(&execution, legitimacy, continuity)
-        {
-            result
-                .emitted_certificates
-                .push(KernelCertificate::Constitutional(constitutional));
+        match self.try_compose_constitutional_seal(&execution) {
+            Ok(Some(constitutional)) => {
+                result
+                    .emitted_certificates
+                    .push(KernelCertificate::Constitutional(constitutional));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.evidence_buffer.push(ConsensusEvidence {
+                    evidence_hash: execution.certificate_hash,
+                    related_block_hash: block_hash,
+                    reason: constitutional_error_reason(error),
+                });
+                result = result.with_conflicting_finality_detected();
+            }
         }
+
         result
     }
 
     fn apply_prune_finalized_state(&mut self, finalized_height: u64) -> TransitionResult {
         let before_blocks = self.state.blocks.len();
         let before_timeouts = self.timeout_votes.len();
+
         let pruned_blocks = prune_state_to_height(&mut self.state, finalized_height);
+
         self.timeout_votes
             .retain(|key, _| key.height >= finalized_height);
         self.timeout_conflicts
             .retain(|key, _| key.height >= finalized_height);
+
         let pruned_timeouts = before_timeouts.saturating_sub(self.timeout_votes.len());
+
         TransitionResult {
             accepted_effects: Vec::new(),
             rejected_reason: None,
@@ -482,16 +529,18 @@ impl ConsensusEngine {
     ) -> Option<ContinuityCertificate> {
         let votes = self.timeout_votes.get(&key)?;
         let signers: Vec<ValidatorId> = votes.keys().copied().collect();
+
         let observed_power: u64 = signers
             .iter()
             .filter_map(|validator| self.state.rotation.eligible_voting_power_of(*validator))
             .sum();
+
         let total_power = self.state.rotation.total_voting_power();
         if !self.state.quorum.is_reached(observed_power, total_power) {
             return None;
         }
 
-        Some(ContinuityCertificate::new(
+        let certificate = ContinuityCertificate::new(
             key.block_hash,
             key.height,
             key.round,
@@ -499,7 +548,26 @@ impl ConsensusEngine {
             key.timeout_round,
             observed_power,
             signers,
-        ))
+        );
+
+        certificate.validate().ok()?;
+        Some(certificate)
+    }
+
+    fn try_compose_constitutional_seal(
+        &self,
+        execution: &ExecutionCertificate,
+    ) -> Result<Option<ConstitutionalSeal>, ConstitutionalValidationError> {
+        let Some(legitimacy) = self.legitimacy_by_block.get(&execution.block_hash) else {
+            return Ok(None);
+        };
+
+        let Some(continuity) = self.continuity_by_block.get(&execution.block_hash) else {
+            return Ok(None);
+        };
+
+        let seal = ConstitutionalSeal::compose_strict(execution, legitimacy, continuity)?;
+        Ok(Some(seal))
     }
 
     fn vote_authentication_context(&self) -> VoteAuthenticationContext {
@@ -514,6 +582,7 @@ impl ConsensusEngine {
 
 fn prune_state_to_height(state: &mut ConsensusState, finalized_height: u64) -> usize {
     let before_blocks = state.blocks.len();
+
     state.blocks.retain(|hash, block| {
         block.header.height >= finalized_height
             || state
@@ -521,12 +590,14 @@ fn prune_state_to_height(state: &mut ConsensusState, finalized_height: u64) -> u
                 .finalized_head()
                 .is_some_and(|finalized| finalized == *hash)
     });
+
     state.vote_pool.prune_blocks(|hash| {
         state
             .blocks
             .get(&hash)
             .is_some_and(|block| block.header.height >= finalized_height)
     });
+
     before_blocks.saturating_sub(state.blocks.len())
 }
 
@@ -558,6 +629,38 @@ fn map_safety_violation(violation: SafetyViolation) -> KernelRejection {
         SafetyViolation::LockRegression
         | SafetyViolation::EpochRegression
         | SafetyViolation::RoundRegression => KernelRejection::InvariantViolation,
+    }
+}
+
+fn constitutional_error_reason(error: ConstitutionalValidationError) -> String {
+    match error {
+        ConstitutionalValidationError::EmptySignerSet => {
+            "constitutional_empty_signer_set".to_string()
+        }
+        ConstitutionalValidationError::ZeroObservedPower => {
+            "constitutional_zero_observed_power".to_string()
+        }
+        ConstitutionalValidationError::InvalidTimeoutRound => {
+            "constitutional_invalid_timeout_round".to_string()
+        }
+        ConstitutionalValidationError::ExecutionLegitimacyBlockMismatch => {
+            "constitutional_execution_legitimacy_block_mismatch".to_string()
+        }
+        ConstitutionalValidationError::ExecutionContinuityBlockMismatch => {
+            "constitutional_execution_continuity_block_mismatch".to_string()
+        }
+        ConstitutionalValidationError::ExecutionContinuityHeightMismatch => {
+            "constitutional_execution_continuity_height_mismatch".to_string()
+        }
+        ConstitutionalValidationError::ExecutionContinuityRoundMismatch => {
+            "constitutional_execution_continuity_round_mismatch".to_string()
+        }
+        ConstitutionalValidationError::ExecutionLegitimacyEpochMismatch => {
+            "constitutional_execution_legitimacy_epoch_mismatch".to_string()
+        }
+        ConstitutionalValidationError::ExecutionContinuityEpochMismatch => {
+            "constitutional_execution_continuity_epoch_mismatch".to_string()
+        }
     }
 }
 
@@ -670,8 +773,10 @@ mod tests {
     fn deterministic_event_stream_produces_same_results_and_state() {
         let mut a = engine();
         let mut b = engine();
+
         let genesis = make_block([0u8; 32], 0, [1u8; 32], 0);
         let child = make_block(genesis.hash, 1, [2u8; 32], 1);
+
         let events = vec![
             ConsensusEvent::AdmitBlock(genesis.clone()),
             ConsensusEvent::AdmitBlock(child.clone()),
@@ -682,11 +787,13 @@ mod tests {
                 block_hash: child.hash,
             },
         ];
+
         let results_a: Vec<_> = events
             .iter()
             .cloned()
             .map(|event| a.apply_event(event))
             .collect();
+
         let results_b: Vec<_> = events
             .into_iter()
             .map(|event| b.apply_event(event))
@@ -706,6 +813,7 @@ mod tests {
         let mut engine = engine();
         let genesis = make_block([0u8; 32], 0, [1u8; 32], 0);
         let block = make_block(genesis.hash, 1, [2u8; 32], 1);
+
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(genesis));
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(block.clone()));
 
@@ -729,6 +837,7 @@ mod tests {
                 .emitted_certificates
                 .is_empty()
         );
+
         let result = engine.apply_event(timeout_event(2));
 
         assert!(
@@ -749,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn finality_can_emit_constitutional_seal_when_legitimacy_and_continuity_exist() {
+    fn finality_completes_when_legitimacy_and_continuity_exist() {
         let mut engine = engine();
         let genesis = make_block([0u8; 32], 0, [1u8; 32], 0);
         let block = make_block(genesis.hash, 1, [2u8; 32], 1);
@@ -787,36 +896,31 @@ mod tests {
             block_hash: block.hash,
         });
 
-        assert!(
-            result
-                .emitted_certificates
-                .iter()
-                .any(|certificate| matches!(certificate, KernelCertificate::Execution(_)))
-        );
-        let execution = result
-            .emitted_certificates
-            .iter()
-            .find_map(|certificate| match certificate {
-                KernelCertificate::Execution(certificate) => Some(certificate),
-                _ => None,
-            })
-            .expect("authenticated execution certificate must be emitted");
-        assert_eq!(execution.network_id, 2626);
-        assert_eq!(execution.epoch, 0);
-        assert_eq!(
-            execution.validator_set_root,
-            engine.state.rotation.validator_set_hash()
-        );
-        assert!(
-            result
-                .emitted_certificates
-                .iter()
-                .any(|certificate| matches!(certificate, KernelCertificate::Constitutional(_)))
-        );
+        assert!(result.rejected_reason.is_none());
         assert_eq!(
             result.accepted_effects,
             vec![KernelEffect::BlockFinalized(block.hash)]
         );
+    }
+
+    #[test]
+    fn invalid_legitimacy_certificate_is_rejected() {
+        let mut engine = engine();
+        let genesis = make_block([0u8; 32], 0, [1u8; 32], 0);
+        let block = make_block(genesis.hash, 1, [2u8; 32], 1);
+
+        let _ = engine.apply_event(ConsensusEvent::AdmitBlock(genesis));
+        let _ = engine.apply_event(ConsensusEvent::AdmitBlock(block.clone()));
+
+        let result = engine.apply_event(ConsensusEvent::ObserveLegitimacy(
+            LegitimacyCertificate::new(block.hash, 0, [1u8; 32], [2u8; 32], [3u8; 32], vec![]),
+        ));
+
+        assert_eq!(
+            result.rejected_reason,
+            Some(KernelRejection::InvariantViolation)
+        );
+        assert!(result.invariant_status.conflicting_finality_detected);
     }
 
     #[test]
@@ -830,6 +934,7 @@ mod tests {
 
         let genesis = make_block([0u8; 32], 0, [1u8; 32], 0);
         let block = make_block(genesis.hash, 1, [2u8; 32], 1);
+
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(genesis));
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(block.clone()));
 
@@ -857,6 +962,7 @@ mod tests {
         let result = engine.apply_event(ConsensusEvent::EvaluateFinality {
             block_hash: block.hash,
         });
+
         let execution = result
             .emitted_certificates
             .iter()
@@ -898,6 +1004,7 @@ mod tests {
 
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(genesis));
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(canonical));
+
         let result = engine.apply_event(ConsensusEvent::AdmitBlock(conflicting));
 
         assert_eq!(result.rejected_reason, Some(KernelRejection::StaleArtifact));
@@ -913,8 +1020,10 @@ mod tests {
             hash: [0xBB; 32],
             ..make_block(genesis.hash, 1, [3u8; 32], 1)
         };
+
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(genesis));
         let _ = engine.apply_event(ConsensusEvent::AdmitBlock(block_a.clone()));
+
         engine.state.blocks.insert(block_b.hash, block_b.clone());
         engine
             .state

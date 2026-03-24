@@ -144,6 +144,7 @@ fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
     let verdict = capture_value(&report, "- Verdict:")?
         .trim_matches('`')
         .to_string();
+
     let overall_percent = capture_percent(&report, "- Overall readiness:")?;
     let testnet_percent = capture_percent(&report, "- **testnet**:")?;
     let mainnet_percent = capture_percent(&report, "- **mainnet**:")?;
@@ -158,6 +159,8 @@ fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
     let commands = command_presets();
     let workspaces = discover_workspace_surfaces(&repo_root)?;
     let ai_surfaces = discover_ai_surfaces(&repo_root)?;
+
+    let desktop_surface_percent = desktop_percent(overall_percent, &nodes, &reports);
 
     let summary = format!(
         "{} blocker(s), {} workspace surface(s), {} AI surface(s), {} node control surface(s), and {} report asset(s) are currently exposed through AOXHub desktop.",
@@ -176,26 +179,26 @@ fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
         summary,
         tracks: vec![
             ReadinessTrack {
-                name: "Mainnet readiness".into(),
+                name: "Mainnet readiness".to_string(),
                 percent: mainnet_percent,
-                summary: "Production controls must all pass before mainnet promotion.".into(),
-                status: status_from_percent(mainnet_percent).into(),
+                summary: "Production controls must all pass before mainnet promotion.".to_string(),
+                status: status_from_percent(mainnet_percent).to_string(),
             },
             ReadinessTrack {
-                name: "Testnet readiness".into(),
+                name: "Testnet readiness".to_string(),
                 percent: testnet_percent,
-                summary: "Testnet should close non-mainnet blockers and sustain AOXHub/core parity."
-                    .into(),
-                status: status_from_percent(testnet_percent).into(),
+                summary:
+                    "Testnet should close non-mainnet blockers and sustain AOXHub/core parity."
+                        .to_string(),
+                status: status_from_percent(testnet_percent).to_string(),
             },
             ReadinessTrack {
-                name: "Desktop control center".into(),
-                percent: desktop_percent(overall_percent, &nodes, &reports),
+                name: "Desktop control center".to_string(),
+                percent: desktop_surface_percent,
                 summary: format!(
-                    "Current release stage: {stage}. Active profile: {profile}. Desktop panel is expected to unify node, wallet, telemetry, and report operations."
+                    "Current release stage: {stage}. Active profile: {profile}. Desktop panel unifies node, wallet, telemetry, evidence, workspace, and AI control planes."
                 ),
-                status: status_from_percent(desktop_percent(overall_percent, &nodes, &reports))
-                    .into(),
+                status: status_from_percent(desktop_surface_percent).to_string(),
             },
         ],
         blockers,
@@ -233,31 +236,55 @@ fn capture_percent(report: &str, prefix: &str) -> AppResult<u8> {
         .lines()
         .find(|line| line.starts_with(prefix))
         .ok_or_else(|| format!("missing percentage line starting with {prefix}"))?;
-    line.split("**")
-        .next_back()
-        .and_then(|tail| tail.split('%').next())
-        .and_then(|value| value.trim().parse::<u8>().ok())
-        .or_else(|| {
-            line.split(':')
-                .nth(1)
-                .and_then(|tail| tail.split('%').next())
-                .and_then(|value| value.trim().parse::<u8>().ok())
-        })
+
+    parse_percent_from_line(line)
         .ok_or_else(|| format!("failed to parse percentage from line: {line}"))
+}
+
+fn parse_percent_from_line(line: &str) -> Option<u8> {
+    let bytes = line.as_bytes();
+    let mut idx = 0usize;
+
+    while idx < bytes.len() {
+        if bytes[idx].is_ascii_digit() {
+            let start = idx;
+            while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+                idx += 1;
+            }
+
+            let number = &line[start..idx];
+            let remainder = &line[idx..];
+
+            if remainder.trim_start().starts_with('%') {
+                let value = number.parse::<u8>().ok()?;
+                return Some(value);
+            }
+        } else {
+            idx += 1;
+        }
+    }
+
+    None
 }
 
 fn capture_blockers(report: &str) -> Vec<LaunchBlocker> {
     collect_section_items(report, "## Remaining blockers")
         .into_iter()
-        .filter_map(|line| {
+        .filter_map(|line: &str| {
             let rest = line.strip_prefix("- ")?;
-            let mut parts = rest.splitn(2, ':');
-            let key = parts.next()?.trim();
-            let detail = parts.next()?.trim();
+            let (key, detail) = rest.split_once(':')?;
+
+            let normalized_key = key.trim();
+            let normalized_detail = detail.trim();
+
+            if normalized_key.is_empty() || normalized_detail.is_empty() {
+                return None;
+            }
+
             Some(LaunchBlocker {
-                title: humanize_key(key),
-                detail: detail.to_string(),
-                command: remediation_for(key).to_string(),
+                title: humanize_key(normalized_key),
+                detail: normalized_detail.to_string(),
+                command: remediation_for(normalized_key).to_string(),
             })
         })
         .collect()
@@ -266,26 +293,28 @@ fn capture_blockers(report: &str) -> Vec<LaunchBlocker> {
 fn capture_area_progress(report: &str) -> Vec<AreaProgress> {
     collect_section_items(report, "## Area progress")
         .into_iter()
-        .filter_map(|line| parse_area_progress(line))
+        .filter_map(parse_area_progress)
         .collect()
 }
 
-fn collect_section_items(report: &str, header: &str) -> Vec<&str> {
+fn collect_section_items<'a>(report: &'a str, header: &str) -> Vec<&'a str> {
     let mut in_section = false;
-    let mut out = Vec::new();
+    let mut out: Vec<&'a str> = Vec::new();
 
     for line in report.lines() {
-        if line.trim() == header {
+        let trimmed = line.trim();
+
+        if trimmed == header {
             in_section = true;
             continue;
         }
 
-        if in_section && line.starts_with("## ") {
+        if in_section && trimmed.starts_with("## ") {
             break;
         }
 
-        if in_section && line.trim_start().starts_with('-') {
-            out.push(line.trim());
+        if in_section && trimmed.starts_with("- ") {
+            out.push(trimmed);
         }
     }
 
@@ -295,13 +324,14 @@ fn collect_section_items(report: &str, header: &str) -> Vec<&str> {
 fn parse_area_progress(line: &str) -> Option<AreaProgress> {
     let rest = line.strip_prefix("- **")?;
     let (name, tail) = rest.split_once("**:")?;
-    let percent = tail
-        .split('%')
-        .next()?
-        .trim()
-        .trim_start_matches(|ch: char| !ch.is_ascii_digit())
-        .parse()
-        .ok()?;
+
+    let percent = parse_percent_from_line(tail)?;
+    let status = if tail.contains("— ready") {
+        "ready"
+    } else {
+        "in-progress"
+    };
+
     let detail = tail
         .split('—')
         .next()
@@ -310,11 +340,6 @@ fn parse_area_progress(line: &str) -> Option<AreaProgress> {
         .trim_matches('-')
         .trim()
         .to_string();
-    let status = if line.contains("— ready") {
-        "ready"
-    } else {
-        "in-progress"
-    };
 
     Some(AreaProgress {
         name: humanize_key(name),
@@ -332,6 +357,7 @@ fn discover_node_controls(repo_root: &Path) -> AppResult<Vec<NodeControl>> {
         .map(|entry| entry.path())
         .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
         .collect::<Vec<_>>();
+
     paths.sort();
 
     paths.into_iter()
@@ -339,17 +365,21 @@ fn discover_node_controls(repo_root: &Path) -> AppResult<Vec<NodeControl>> {
         .map(|path| {
             let content = fs::read_to_string(&path)
                 .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+
             let node_name = config_value(&content, "node_name").unwrap_or_else(|| "node".into());
             let chain_id = config_value(&content, "chain_id").unwrap_or_else(|| "unknown".into());
             let listen_addr =
                 config_value(&content, "listen_addr").unwrap_or_else(|| "127.0.0.1:0".into());
             let rpc_addr =
                 config_value(&content, "rpc_addr").unwrap_or_else(|| "127.0.0.1:0".into());
-            let security_mode = config_value(&content, "security_mode")
-                .unwrap_or_else(|| "unknown".into());
+            let security_mode =
+                config_value(&content, "security_mode").unwrap_or_else(|| "unknown".into());
             let peer_count = list_entry_count(&content, "peers");
+
             let status = if security_mode.contains("test_fixture") {
                 "degraded"
+            } else if listen_addr == "127.0.0.1:0" || rpc_addr == "127.0.0.1:0" {
+                "offline"
             } else {
                 "online"
             };
@@ -360,7 +390,7 @@ fn discover_node_controls(repo_root: &Path) -> AppResult<Vec<NodeControl>> {
                 status: status.to_string(),
                 chain_id,
                 listen_addr,
-                rpc_addr: rpc_addr.clone(),
+                rpc_addr,
                 peer_count,
                 security_mode,
                 command: format!(
@@ -399,7 +429,7 @@ fn discover_telemetry_surfaces(repo_root: &Path) -> Vec<TelemetrySurface> {
 
     vec![
         TelemetrySurface {
-            title: "Mainnet RPC".into(),
+            title: "Mainnet RPC".to_string(),
             status: file_exists(repo_root, "configs/mainnet.toml"),
             target: config_value(&mainnet, "rpc_addr").unwrap_or_else(|| "n/a".into()),
             detail: format!(
@@ -408,7 +438,7 @@ fn discover_telemetry_surfaces(repo_root: &Path) -> Vec<TelemetrySurface> {
             ),
         },
         TelemetrySurface {
-            title: "Testnet RPC".into(),
+            title: "Testnet RPC".to_string(),
             status: file_exists(repo_root, "configs/testnet.toml"),
             target: config_value(&testnet, "rpc_addr").unwrap_or_else(|| "n/a".into()),
             detail: format!(
@@ -417,15 +447,16 @@ fn discover_telemetry_surfaces(repo_root: &Path) -> Vec<TelemetrySurface> {
             ),
         },
         TelemetrySurface {
-            title: "Telemetry snapshot".into(),
+            title: "Telemetry snapshot".to_string(),
             status: if closure_dir.join("telemetry-snapshot.json").exists() {
-                "ready".into()
+                "ready".to_string()
             } else {
-                "blocked".into()
+                "blocked".to_string()
             },
-            target: "artifacts/network-production-closure/telemetry-snapshot.json".into(),
-            detail: "Prometheus, alerts, and closure telemetry evidence should be exported here."
-                .into(),
+            target: "artifacts/network-production-closure/telemetry-snapshot.json".to_string(),
+            detail:
+                "Prometheus, alerting, and closure telemetry evidence should be exported here."
+                    .to_string(),
         },
     ]
 }
@@ -456,9 +487,9 @@ fn discover_report_assets(repo_root: &Path) -> Vec<ReportAsset> {
             ReportAsset {
                 title: title.to_string(),
                 status: if target.exists() {
-                    "ready".into()
+                    "ready".to_string()
                 } else {
-                    "queued".into()
+                    "queued".to_string()
                 },
                 path: path.to_string(),
                 detail: detail.to_string(),
@@ -470,28 +501,28 @@ fn discover_report_assets(repo_root: &Path) -> Vec<ReportAsset> {
 fn wallet_surfaces() -> Vec<WalletSurface> {
     vec![
         WalletSurface {
-            title: "Operator wallet".into(),
-            route: "mainnet guarded".into(),
-            status: "connected".into(),
-            address_hint: "AOXC1-VAL-OPER-PRIMARY".into(),
-            command: "aoxc key-bootstrap --profile mainnet --password <value>".into(),
-            detail: "Validator lifecycle, governance, and emergency operator actions should flow through this lane.".into(),
+            title: "Operator wallet".to_string(),
+            route: "mainnet guarded".to_string(),
+            status: "connected".to_string(),
+            address_hint: "AOXC1-VAL-OPER-PRIMARY".to_string(),
+            command: "aoxc key-bootstrap --profile mainnet --password <value>".to_string(),
+            detail: "Validator lifecycle, governance, and emergency operator actions should flow through this lane.".to_string(),
         },
         WalletSurface {
-            title: "Treasury wallet".into(),
-            route: "dual-route mainnet/testnet".into(),
-            status: "attention".into(),
-            address_hint: "AOXC1-TREASURY-DESKTOP".into(),
-            command: "aoxc wallet inspect --profile mainnet".into(),
-            detail: "Treasury moves require policy visibility and audit export before approval.".into(),
+            title: "Treasury wallet".to_string(),
+            route: "dual-route mainnet/testnet".to_string(),
+            status: "attention".to_string(),
+            address_hint: "AOXC1-TREASURY-DESKTOP".to_string(),
+            command: "aoxc wallet inspect --profile mainnet".to_string(),
+            detail: "Treasury movements require policy visibility and audit export before approval.".to_string(),
         },
         WalletSurface {
-            title: "Recovery wallet".into(),
-            route: "offline recovery lane".into(),
-            status: "locked".into(),
-            address_hint: "AOXC1-RECOVERY-ESCROW".into(),
-            command: "aoxc diagnostics-bundle --redact".into(),
-            detail: "Disaster recovery drills, key rotation, and cold-path verification anchor.".into(),
+            title: "Recovery wallet".to_string(),
+            route: "offline recovery lane".to_string(),
+            status: "locked".to_string(),
+            address_hint: "AOXC1-RECOVERY-ESCROW".to_string(),
+            command: "aoxc diagnostics-bundle --redact".to_string(),
+            detail: "Disaster recovery drills, key rotation, and cold-path verification anchor.".to_string(),
         },
     ]
 }
@@ -499,19 +530,25 @@ fn wallet_surfaces() -> Vec<WalletSurface> {
 fn command_presets() -> Vec<CommandPreset> {
     vec![
         CommandPreset {
-            title: "Bring up deterministic 3-node cluster".into(),
-            command: "configs/deterministic-testnet/launch-testnet.sh".into(),
-            intent: "Bootstrap three local nodes and verify cluster orchestration from desktop.".into(),
+            title: "Bring up deterministic 3-node cluster".to_string(),
+            command: "configs/deterministic-testnet/launch-testnet.sh".to_string(),
+            intent:
+                "Bootstrap three local nodes and verify cluster orchestration from desktop."
+                    .to_string(),
         },
         CommandPreset {
-            title: "Generate production audit".into(),
-            command: "cargo run -q -p aoxcmd -- production-audit --format json".into(),
-            intent: "Refresh the operator audit surface before release or wallet approval.".into(),
+            title: "Generate production audit".to_string(),
+            command: "cargo run -q -p aoxcmd -- production-audit --format json".to_string(),
+            intent: "Refresh the operator audit surface before release or wallet approval."
+                .to_string(),
         },
         CommandPreset {
-            title: "Produce closure bundle".into(),
-            command: "scripts/validation/network_production_closure.sh --scenario soak".into(),
-            intent: "Collect telemetry, runtime, and rollout evidence for the admin cockpit reporting tab.".into(),
+            title: "Produce closure bundle".to_string(),
+            command: "scripts/validation/network_production_closure.sh --scenario soak"
+                .to_string(),
+            intent:
+                "Collect telemetry, runtime, and rollout evidence for the admin cockpit reporting tab."
+                    .to_string(),
         },
     ]
 }
@@ -530,8 +567,10 @@ fn discover_workspace_surfaces(repo_root: &Path) -> AppResult<Vec<WorkspaceSurfa
                     manifest_path.display()
                 )
             })?;
+
             let package_name = capture_manifest_package_name(&manifest)
                 .unwrap_or_else(|| member.rsplit('/').next().unwrap_or("workspace").to_string());
+
             let readme_path = repo_root.join(&member).join("README.md");
             let summary = readme_headline(&readme_path).unwrap_or_else(|| {
                 format!("{package_name} workspace surface exposed through AOXHub desktop.")
@@ -558,6 +597,7 @@ fn discover_ai_surfaces(repo_root: &Path) -> AppResult<Vec<AiSurface>> {
         .filter_map(|line| line.trim().strip_prefix("pub mod "))
         .map(|module| module.trim_end_matches(';').trim().to_string())
         .collect::<Vec<_>>();
+
     modules.sort();
 
     Ok(modules
@@ -618,25 +658,21 @@ fn status_from_percent(percent: u8) -> &'static str {
 }
 
 fn desktop_percent(overall_percent: u8, nodes: &[NodeControl], reports: &[ReportAsset]) -> u8 {
-    let node_bonus = u8::try_from(nodes.iter().filter(|node| node.status == "online").count())
-        .unwrap_or(0)
-        .saturating_mul(5);
-    let report_bonus = u8::try_from(
-        reports
-            .iter()
-            .filter(|report| report.status == "ready")
-            .count(),
-    )
-    .unwrap_or(0)
-    .saturating_mul(3);
+    let online_nodes = u8::try_from(nodes.iter().filter(|node| node.status == "online").count())
+        .unwrap_or(0);
+    let ready_reports =
+        u8::try_from(reports.iter().filter(|report| report.status == "ready").count())
+            .unwrap_or(0);
+
     overall_percent
-        .saturating_add(node_bonus)
-        .saturating_add(report_bonus)
+        .saturating_add(online_nodes.saturating_mul(5))
+        .saturating_add(ready_reports.saturating_mul(3))
         .min(100)
 }
 
 fn file_status(repo_root: &Path, label: &str, relative_path: &str) -> FileStatus {
     let path = repo_root.join(relative_path);
+
     FileStatus {
         label: label.to_string(),
         path: relative_path.to_string(),
@@ -646,16 +682,18 @@ fn file_status(repo_root: &Path, label: &str, relative_path: &str) -> FileStatus
 
 fn file_exists(repo_root: &Path, relative_path: &str) -> String {
     if repo_root.join(relative_path).exists() {
-        "ready".into()
+        "ready".to_string()
     } else {
-        "blocked".into()
+        "blocked".to_string()
     }
 }
 
 fn config_value(content: &str, key: &str) -> Option<String> {
+    let prefix = format!("{key} = ");
+
     content
         .lines()
-        .find_map(|line| line.trim().strip_prefix(&format!("{key} = ")))
+        .find_map(|line| line.trim().strip_prefix(&prefix))
         .map(|value| value.trim().trim_matches('"').to_string())
 }
 
@@ -665,13 +703,16 @@ fn workspace_members(content: &str) -> Vec<String> {
 
     for line in content.lines() {
         let trimmed = line.trim();
+
         if trimmed.starts_with("members = [") {
             in_members = true;
             continue;
         }
+
         if in_members && trimmed == "]" {
             break;
         }
+
         if in_members {
             let value = trimmed.trim_end_matches(',').trim().trim_matches('"');
             if !value.is_empty() {
@@ -742,8 +783,10 @@ fn ai_summary(module: &str) -> String {
             "Provider adapters bridge approved AI requests into external or heuristic backends."
                 .to_string()
         }
-        "audit" => "Every AI invocation should emit auditable records and explicit dispositions."
-            .to_string(),
+        "audit" => {
+            "Every AI invocation should emit auditable records and explicit dispositions."
+                .to_string()
+        }
         "backend" => {
             "Backend factory and execution surfaces select local or remote inference providers."
                 .to_string()
@@ -766,13 +809,20 @@ fn ai_summary(module: &str) -> String {
             "Model manifests define model identity, limits, and deployment metadata.".to_string()
         }
         "model" => {
-            "Typed request/response and assessment models standardize AI integration.".to_string()
+            "Typed request/response and assessment models standardize AI integration."
+                .to_string()
         }
-        "policy" => "Policy fusion decides whether an AI request is allowed or denied.".to_string(),
-        "registry" => "Registry tracks available AI models and extensions exposed to the platform."
-            .to_string(),
-        "traits" => "Shared traits define stable AI interfaces for context, policy, and backends."
-            .to_string(),
+        "policy" => {
+            "Policy fusion decides whether an AI request is allowed or denied.".to_string()
+        }
+        "registry" => {
+            "Registry tracks available AI models and extensions exposed to the platform."
+                .to_string()
+        }
+        "traits" => {
+            "Shared traits define stable AI interfaces for context, policy, and backends."
+                .to_string()
+        }
         _ => format!("{module} AI surface is exposed through the desktop control plane."),
     }
 }
@@ -787,9 +837,11 @@ fn ai_command_hint(module: &str) -> &'static str {
 }
 
 fn list_entry_count(content: &str, key: &str) -> usize {
+    let marker = format!("{key} = [");
+
     let Some(start) = content
         .lines()
-        .position(|line| line.trim_start().starts_with(&format!("{key} = [")))
+        .position(|line| line.trim_start().starts_with(&marker))
     else {
         return 0;
     };
@@ -815,19 +867,29 @@ fn node_role(node_name: &str) -> &'static str {
 mod tests {
     use super::{
         capture_area_progress, capture_manifest_package_name, config_value, desktop_percent,
-        list_entry_count, parse_area_progress, workspace_members, NodeControl, ReportAsset,
+        list_entry_count, parse_area_progress, parse_percent_from_line, workspace_members,
+        NodeControl, ReportAsset,
     };
+
+    #[test]
+    fn parses_markdown_percent_lines() {
+        assert_eq!(parse_percent_from_line("- Overall readiness: **60%** (73/121)"), Some(60));
+        assert_eq!(parse_percent_from_line("- **mainnet**: 60% (73/121) — in-progress"), Some(60));
+        assert_eq!(parse_percent_from_line("- **testnet**: 65% (73/111) — in-progress"), Some(65));
+    }
 
     #[test]
     fn parses_area_progress_lines() {
         let report = "## Area progress\n- **network**: 100% (1/1 checks, weight 10/10) — ready\n- **identity**: 0% (0/2 checks, weight 0/22) — bootstrap\n";
         let areas = capture_area_progress(report);
+
         assert_eq!(areas.len(), 2);
         assert_eq!(areas[0].name, "Network");
         assert_eq!(areas[0].percent, 100);
         assert_eq!(areas[0].status, "ready");
         assert_eq!(areas[1].name, "Identity");
         assert_eq!(areas[1].percent, 0);
+        assert_eq!(areas[1].status, "in-progress");
     }
 
     #[test]
@@ -840,6 +902,7 @@ peers = [
   "127.0.0.1:39003"
 ]
 "#;
+
         assert_eq!(config_value(config, "node_name").as_deref(), Some("atlas"));
         assert_eq!(list_entry_count(config, "peers"), 2);
     }
@@ -870,6 +933,7 @@ peers = [
                 command: "cmd".into(),
             },
         ];
+
         let reports = vec![
             ReportAsset {
                 title: "a".into(),
@@ -884,6 +948,7 @@ peers = [
                 detail: "d".into(),
             },
         ];
+
         assert_eq!(desktop_percent(60, &nodes, &reports), 68);
     }
 
@@ -902,6 +967,7 @@ members = [
   "tests",
 ]
 "#;
+
         assert_eq!(
             workspace_members(manifest),
             vec!["crates/aoxcai", "crates/aoxcore", "tests"]
@@ -915,6 +981,7 @@ members = [
 name = "aoxcai"
 version = "0.1.0"
 "#;
+
         assert_eq!(
             capture_manifest_package_name(manifest).as_deref(),
             Some("aoxcai")

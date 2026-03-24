@@ -115,6 +115,7 @@ fn canonicalize_body(body: &mut BlockBody) -> Result<(), BlockBuildError> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn validate_section_semantics(timestamp: u64, body: &BlockBody) -> Result<(), BlockBuildError> {
     let mut time_seal: Option<&TimeSealSection> = None;
     let mut pq_section: Option<&PostQuantumSection> = None;

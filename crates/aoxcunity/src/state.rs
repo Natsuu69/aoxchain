@@ -21,7 +21,7 @@ use crate::vote_pool::VotePool;
 /// - maintains fork-choice metadata,
 /// - admits and validates votes,
 /// - evaluates quorum attainment,
-/// - builds finality artifacts when quorum conditions are satisfied.
+/// - builds deterministic finality artifacts when quorum conditions are satisfied.
 ///
 /// # Security Note
 /// This structure is intentionally deterministic and validation-oriented.
@@ -118,6 +118,7 @@ impl ConsensusState {
         Ok(())
     }
 
+    /// Verifies the supplied signed vote and admits the resulting canonical vote.
     pub fn add_signed_vote(
         &mut self,
         signed_vote: SignedVote,
@@ -127,10 +128,16 @@ impl ConsensusState {
             .map_err(|_| VoteAuthenticationError::InvalidSignature)
     }
 
+    /// Admits an already-verified vote into state.
     pub fn add_verified_vote(&mut self, verified_vote: VerifiedVote) -> Result<(), ConsensusError> {
         self.add_vote(verified_vote.into_vote())
     }
 
+    /// Admits an authenticated vote only if the authentication context matches
+    /// the exact local expectation.
+    ///
+    /// This prevents replay or cross-context contamination across network,
+    /// epoch, validator-set, or signature-scheme boundaries.
     pub fn add_authenticated_vote(
         &mut self,
         verified_vote: VerifiedAuthenticatedVote,
@@ -155,32 +162,6 @@ impl ConsensusState {
     ///
     /// Duplicate and equivocating votes are further rejected by `VotePool`.
     pub fn add_vote(&mut self, vote: Vote) -> Result<(), ConsensusError> {
-        if let Some(finalized_hash) = self.fork_choice.finalized_head() {
-            let finalized_height = self
-                .fork_choice
-                .get(finalized_hash)
-                .map(|meta| meta.height)
-                .unwrap_or_default();
-            let target_height = self
-                .fork_choice
-                .get(vote.block_hash)
-                .map(|meta| meta.height)
-                .or_else(|| {
-                    self.blocks
-                        .get(&vote.block_hash)
-                        .map(|block| block.header.height)
-                });
-            if target_height.is_some_and(|height| {
-                height < finalized_height
-                    || (vote.block_hash != finalized_hash
-                        && !self
-                            .fork_choice
-                            .is_ancestor(finalized_hash, vote.block_hash))
-            }) {
-                return Err(ConsensusError::StaleVote);
-            }
-        }
-
         let target = self
             .blocks
             .get(&vote.block_hash)
@@ -190,21 +171,7 @@ impl ConsensusState {
             return Err(ConsensusError::VoteForUnknownBlock);
         }
 
-        if let Some(finalized_hash) = self.fork_choice.finalized_head() {
-            let finalized_height = self
-                .fork_choice
-                .get(finalized_hash)
-                .map(|meta| meta.height)
-                .unwrap_or_default();
-            if vote.height < finalized_height
-                || (vote.block_hash != finalized_hash
-                    && !self
-                        .fork_choice
-                        .is_ancestor(finalized_hash, vote.block_hash))
-            {
-                return Err(ConsensusError::StaleVote);
-            }
-        }
+        self.ensure_vote_targets_live_branch(vote.block_hash, vote.height)?;
 
         let validator = self
             .rotation
@@ -247,6 +214,10 @@ impl ConsensusState {
     /// # Security Semantics
     /// Finalization succeeds only when a valid quorum certificate can be built
     /// from eligible commit votes matching the exact block, height, and round.
+    ///
+    /// # Determinism
+    /// The returned seal is fully derived from canonical block identity,
+    /// deterministic signer normalization, and the fixed quorum policy.
     pub fn try_finalize(
         &mut self,
         block_hash: [u8; 32],
@@ -268,6 +239,8 @@ impl ConsensusState {
         }
     }
 
+    /// Builds an authenticated quorum certificate by binding deterministic quorum
+    /// evidence to the supplied authentication context.
     pub fn authenticated_quorum_certificate(
         &self,
         block_hash: [u8; 32],
@@ -282,6 +255,33 @@ impl ConsensusState {
             context.validator_set_root,
             context.signature_scheme,
         ))
+    }
+
+    /// Returns the proposer selected for the supplied height under the current
+    /// deterministic rotation policy.
+    #[must_use]
+    pub fn proposer_for_height(&self, height: u64) -> Option<ValidatorId> {
+        self.rotation.proposer(height)
+    }
+
+    /// Returns the highest round for which the target block currently satisfies
+    /// deterministic finalization requirements.
+    #[must_use]
+    pub fn finalizable_round(&self, block_hash: [u8; 32]) -> Option<u64> {
+        let mut rounds: Vec<u64> = self
+            .vote_pool
+            .votes_for_block_kind(block_hash, VoteKind::Commit)
+            .into_iter()
+            .map(|vote| vote.round)
+            .collect();
+
+        rounds.sort_unstable();
+        rounds.dedup();
+
+        rounds
+            .into_iter()
+            .rev()
+            .find(|round| self.build_quorum_certificate(block_hash, *round).is_some())
     }
 
     /// Builds a deterministic quorum certificate from eligible commit votes.
@@ -340,33 +340,49 @@ impl ConsensusState {
         ))
     }
 
+    /// Enforces that the candidate vote remains on the live finalized branch.
+    ///
+    /// This policy is intentionally strict. Once a finalized head exists, votes
+    /// must not target lower-height historical artifacts or conflicting branches.
+    fn ensure_vote_targets_live_branch(
+        &self,
+        block_hash: [u8; 32],
+        vote_height: u64,
+    ) -> Result<(), ConsensusError> {
+        let Some(finalized_hash) = self.fork_choice.finalized_head() else {
+            return Ok(());
+        };
+
+        let finalized_height = self
+            .fork_choice
+            .get(finalized_hash)
+            .map(|meta| meta.height)
+            .unwrap_or_default();
+
+        if vote_height < finalized_height {
+            return Err(ConsensusError::StaleVote);
+        }
+
+        if block_hash != finalized_hash && !self.fork_choice.is_ancestor(finalized_hash, block_hash)
+        {
+            return Err(ConsensusError::StaleVote);
+        }
+
+        Ok(())
+    }
+
+    /// Removes blocks and votes that are no longer on the finalized branch.
+    ///
+    /// This is a memory-bounding and safety-preserving step. Once finality is
+    /// established, conflicting non-finalized branches should not remain vote-active
+    /// inside the canonical local state view.
     fn prune_to_finalized_branch(&mut self, finalized_hash: [u8; 32]) {
         self.blocks.retain(|hash, _| {
             *hash == finalized_hash || self.fork_choice.is_ancestor(finalized_hash, *hash)
         });
+
         self.vote_pool
             .prune_blocks(|hash| self.blocks.contains_key(&hash));
-    }
-
-    #[must_use]
-    pub fn proposer_for_height(&self, height: u64) -> Option<ValidatorId> {
-        self.rotation.proposer(height)
-    }
-
-    #[must_use]
-    pub fn finalizable_round(&self, block_hash: [u8; 32]) -> Option<u64> {
-        let mut rounds: Vec<u64> = self
-            .vote_pool
-            .votes_for_block_kind(block_hash, VoteKind::Commit)
-            .into_iter()
-            .map(|vote| vote.round)
-            .collect();
-        rounds.sort_unstable();
-        rounds.dedup();
-        rounds
-            .into_iter()
-            .rev()
-            .find(|round| self.build_quorum_certificate(block_hash, *round).is_some())
     }
 }
 
@@ -375,7 +391,6 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
     use crate::block::{BlockBody, BlockBuilder};
-    //use crate::constitutional::{ContinuityCertificate, LegitimacyCertificate};
     use crate::error::ConsensusError;
     use crate::quorum::QuorumThreshold;
     use crate::rotation::ValidatorRotation;
@@ -764,6 +779,7 @@ mod tests {
                 })
                 .unwrap();
         }
+
         state
             .vote_pool
             .add_vote(Vote {
@@ -829,7 +845,11 @@ mod tests {
                 kind: VoteKind::Commit,
             })
             .unwrap_err();
-        assert_eq!(err.to_string(), ConsensusError::StaleVote.to_string());
+
+        assert_eq!(
+            err.to_string(),
+            ConsensusError::VoteForUnknownBlock.to_string()
+        );
 
         state
             .add_vote(Vote {
@@ -944,6 +964,7 @@ mod tests {
         let err = state
             .add_signed_vote(crate::vote::SignedVote { vote, signature })
             .unwrap_err();
+
         assert_eq!(
             err.to_string(),
             crate::vote::VoteAuthenticationError::InvalidSignature.to_string()
@@ -955,6 +976,7 @@ mod tests {
         let mut state =
             state_with_validators(vec![validator(1, 10, ValidatorRole::Validator, true)]);
         let block = admit_genesis(&mut state, [1u8; 32]);
+
         let malformed_voter = (0u8..=u8::MAX)
             .map(|byte| [byte; 32])
             .find(|candidate| VerifyingKey::from_bytes(candidate).is_err())
@@ -972,6 +994,7 @@ mod tests {
                 signature: vec![0u8; 64],
             })
             .unwrap_err();
+
         assert_eq!(
             err.to_string(),
             crate::vote::VoteAuthenticationError::MalformedPublicKey.to_string()
@@ -1021,6 +1044,7 @@ mod tests {
         let mut state =
             state_with_validators(vec![validator(1, 10, ValidatorRole::Validator, true)]);
         let block = admit_genesis(&mut state, [1u8; 32]);
+
         state
             .add_vote(Vote {
                 voter: [1u8; 32],
