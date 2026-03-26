@@ -1,14 +1,20 @@
 use crate::{
     data_home::{read_file, resolve_home, write_file},
     error::{AppError, ErrorCode},
+    keys::manager::inspect_operator_key,
     node::state::NodeState,
 };
 use std::path::PathBuf;
 
+/// Returns the canonical runtime node-state path.
+///
+/// The node-state document is persisted under:
+/// `<home>/runtime/node_state.json`
 pub fn state_path() -> Result<PathBuf, AppError> {
     Ok(resolve_home()?.join("runtime").join("node_state.json"))
 }
 
+/// Loads and validates the persisted node-state document.
 pub fn load_state() -> Result<NodeState, AppError> {
     let path = state_path()?;
     let raw = read_file(&path).map_err(|_| {
@@ -17,15 +23,19 @@ pub fn load_state() -> Result<NodeState, AppError> {
             format!("Node state file is missing at {}", path.display()),
         )
     })?;
+
     let state: NodeState = serde_json::from_str(&raw).map_err(|e| {
         AppError::with_source(ErrorCode::NodeStateInvalid, "Failed to parse node state", e)
     })?;
+
     state
         .validate()
         .map_err(|e| AppError::new(ErrorCode::NodeStateInvalid, e))?;
+
     Ok(state)
 }
 
+/// Persists the node-state document.
 pub fn persist_state(state: &NodeState) -> Result<(), AppError> {
     let path = state_path()?;
     let content = serde_json::to_string_pretty(state).map_err(|e| {
@@ -38,8 +48,27 @@ pub fn persist_state(state: &NodeState) -> Result<(), AppError> {
     write_file(&path, &content)
 }
 
+/// Builds the canonical bootstrap node-state and enriches it with
+/// operator key material when available.
+///
+/// This function intentionally tolerates the absence of operator key material.
+/// Bootstrap must remain possible before key bootstrap in certain local flows.
+/// When key material exists, the runtime node-state is enriched so that
+/// runtime-status and persisted node-state surfaces remain operationally useful.
 pub fn bootstrap_state() -> Result<NodeState, AppError> {
-    let state = NodeState::bootstrap();
+    let mut state = NodeState::bootstrap();
+
+    if let Ok(summary) = inspect_operator_key() {
+        state.key_material.bundle_fingerprint = summary.bundle_fingerprint;
+        state.key_material.operational_state = summary.operational_state;
+        state.key_material.consensus_public_key_hex = summary.consensus_public_key;
+        state.key_material.transport_public_key_hex = summary.transport_public_key;
+    }
+
+    state
+        .validate()
+        .map_err(|e| AppError::new(ErrorCode::NodeStateInvalid, e))?;
+
     persist_state(&state)?;
     Ok(state)
 }
@@ -47,8 +76,7 @@ pub fn bootstrap_state() -> Result<NodeState, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{bootstrap_state, load_state, persist_state, state_path};
-    use crate::error::ErrorCode;
-    use crate::node::state::NodeState;
+    use crate::{error::ErrorCode, keys::manager::bootstrap_operator_key, node::state::NodeState};
     use std::{
         env, fs,
         path::PathBuf,
@@ -86,6 +114,40 @@ mod tests {
         assert!(bootstrapped.initialized);
         assert_eq!(reloaded.consensus.last_message_kind, "bootstrap");
         assert_eq!(reloaded.current_height, 0);
+
+        let _ = fs::remove_dir_all(&home);
+        env::remove_var("AOXC_HOME");
+    }
+
+    #[test]
+    fn bootstrap_state_enriches_key_material_when_operator_key_exists() {
+        let _guard = env_lock().lock().expect("test env mutex must lock");
+        let home = unique_test_home("bootstrap-state-keys");
+        env::set_var("AOXC_HOME", &home);
+
+        bootstrap_operator_key("validator-01", "devnet", "StrongPass123!")
+            .expect("operator key bootstrap should succeed");
+
+        let state = bootstrap_state().expect("bootstrap should persist enriched node state");
+
+        assert!(!state.key_material.bundle_fingerprint.is_empty());
+        assert_eq!(state.key_material.operational_state, "active");
+        assert!(!state.key_material.consensus_public_key_hex.is_empty());
+        assert!(!state.key_material.transport_public_key_hex.is_empty());
+
+        let reloaded = load_state().expect("enriched node state should load");
+        assert_eq!(
+            reloaded.key_material.bundle_fingerprint,
+            state.key_material.bundle_fingerprint
+        );
+        assert_eq!(
+            reloaded.key_material.consensus_public_key_hex,
+            state.key_material.consensus_public_key_hex
+        );
+        assert_eq!(
+            reloaded.key_material.transport_public_key_hex,
+            state.key_material.transport_public_key_hex
+        );
 
         let _ = fs::remove_dir_all(&home);
         env::remove_var("AOXC_HOME");
