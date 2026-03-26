@@ -1,11 +1,42 @@
+//! AOXC genesis loader.
+//!
+//! This module is responsible for loading, validating, persisting, and
+//! constructing genesis artifacts for AOXC-native networks.
+//!
+//! The implementation is intentionally aligned with the AOXC forward-compatible
+//! identity model where:
+//! - the binary remains network-agnostic,
+//! - network identity is derived from genesis configuration,
+//! - public, test, validation, and private deployments share the same loader,
+//! - hard-coded third-party settlement network references are prohibited.
+
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use super::config::{GenesisBlock, GenesisConfig, TREASURY_ACCOUNT};
+use super::config::{
+    AOXCANDSeal,
+    AOXC_FAMILY_ID,
+    ChainIdentity,
+    GenesisAccount,
+    GenesisConfig,
+    GenesisConfigError,
+    NetworkClass,
+    SettlementLink,
+    Validator,
+};
 
-/// Default treasury allocation.
+/// Canonical treasury account identifier used by the default genesis builder.
+///
+/// This identifier is AOXC-native and must remain stable unless the treasury
+/// naming policy is formally migrated.
+pub const TREASURY_ACCOUNT: &str = "AOXC_TREASURY_GENESIS";
+
+/// Default treasury allocation used by the default genesis builders.
 const DEFAULT_TREASURY: u128 = 1_000_000_000;
+
+/// Default target block time in milliseconds.
+const DEFAULT_BLOCK_TIME_MS: u64 = 3_000;
 
 /// Maximum accepted genesis file size in bytes.
 ///
@@ -19,7 +50,6 @@ pub enum GenesisError {
     ReadError(String),
     ParseError(String),
     ValidationError(String),
-    ConstructionError(String),
     WriteError(String),
 }
 
@@ -29,7 +59,6 @@ impl std::fmt::Display for GenesisError {
             Self::ReadError(error) => write!(f, "GENESIS_READ_ERROR: {error}"),
             Self::ParseError(error) => write!(f, "GENESIS_PARSE_ERROR: {error}"),
             Self::ValidationError(error) => write!(f, "GENESIS_VALIDATION_ERROR: {error}"),
-            Self::ConstructionError(error) => write!(f, "GENESIS_CONSTRUCTION_ERROR: {error}"),
             Self::WriteError(error) => write!(f, "GENESIS_WRITE_ERROR: {error}"),
         }
     }
@@ -37,18 +66,24 @@ impl std::fmt::Display for GenesisError {
 
 impl std::error::Error for GenesisError {}
 
+impl From<GenesisConfigError> for GenesisError {
+    fn from(error: GenesisConfigError) -> Self {
+        Self::ValidationError(error.to_string())
+    }
+}
+
 /// Responsible for loading, validating, persisting, and constructing
-/// genesis artifacts from configuration sources.
+/// AOXC-native genesis configuration artifacts.
 pub struct GenesisLoader;
 
 impl GenesisLoader {
-    /// Loads genesis configuration from disk and constructs a `GenesisBlock`.
+    /// Loads genesis configuration from disk.
     ///
     /// Security properties:
     /// - rejects non-file paths;
     /// - rejects empty or oversized genesis input;
-    /// - validates the parsed configuration before constructing the block.
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<GenesisBlock, GenesisError> {
+    /// - validates the parsed configuration before returning it.
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<GenesisConfig, GenesisError> {
         let path = path.as_ref();
 
         let metadata =
@@ -86,23 +121,22 @@ impl GenesisLoader {
             )));
         }
 
-        let config: GenesisConfig = serde_json::from_str(&data)
-            .map_err(|error| GenesisError::ParseError(error.to_string()))?;
+        let config: GenesisConfig =
+            serde_json::from_str(&data).map_err(|error| GenesisError::ParseError(error.to_string()))?;
 
-        config.validate().map_err(GenesisError::ValidationError)?;
-
-        GenesisBlock::try_new(config).map_err(GenesisError::ConstructionError)
+        config.validate()?;
+        Ok(config)
     }
 
     /// Persists genesis configuration to disk.
     ///
     /// Security properties:
-    /// - ensures parent directory exists;
+    /// - ensures the parent directory exists;
     /// - writes to a temporary file first;
     /// - flushes and synchronizes file contents before rename;
     /// - renames atomically into the destination path on supported filesystems.
     pub fn save<P: AsRef<Path>>(genesis: &GenesisConfig, path: P) -> Result<(), GenesisError> {
-        genesis.validate().map_err(GenesisError::ValidationError)?;
+        genesis.validate()?;
 
         let path = path.as_ref();
 
@@ -122,24 +156,24 @@ impl GenesisLoader {
         Ok(())
     }
 
-    /// Constructs a default genesis block.
-    ///
-    /// Compatibility behavior is preserved:
-    /// - treasury is funded;
-    /// - the canonical treasury account is inserted into the genesis accounts list.
-    pub fn load_default() -> Result<GenesisBlock, GenesisError> {
-        let mut config = GenesisConfig::new();
-
-        config.treasury = DEFAULT_TREASURY;
-        config.add_account(TREASURY_ACCOUNT.to_string(), DEFAULT_TREASURY);
-
-        Ok(GenesisBlock::try_new(config)
-            .expect("GENESIS_DEFAULT: default genesis configuration must remain valid"))
+    /// Constructs the canonical AOXC public mainnet genesis configuration.
+    pub fn load_default() -> Result<GenesisConfig, GenesisError> {
+        Self::build_named_default(NetworkClass::PublicMainnet)
     }
 
-    /// Loads genesis from disk, or creates and persists a default genesis
-    /// when the target path does not yet exist.
-    pub fn load_or_create<P: AsRef<Path>>(path: P) -> Result<GenesisBlock, GenesisError> {
+    /// Constructs the canonical AOXC public testnet genesis configuration.
+    pub fn load_default_testnet() -> Result<GenesisConfig, GenesisError> {
+        Self::build_named_default(NetworkClass::PublicTestnet)
+    }
+
+    /// Constructs the canonical AOXC validation genesis configuration.
+    pub fn load_default_validation() -> Result<GenesisConfig, GenesisError> {
+        Self::build_named_default(NetworkClass::Validation)
+    }
+
+    /// Loads genesis from disk, or creates and persists the canonical AOXC
+    /// default mainnet genesis when the target path does not yet exist.
+    pub fn load_or_create<P: AsRef<Path>>(path: P) -> Result<GenesisConfig, GenesisError> {
         let path_ref = path.as_ref();
 
         match fs::metadata(path_ref) {
@@ -155,7 +189,7 @@ impl GenesisLoader {
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 let genesis = Self::load_default()?;
-                Self::save(&genesis.config, path_ref)?;
+                Self::save(&genesis, path_ref)?;
                 Ok(genesis)
             }
             Err(error) => Err(GenesisError::ReadError(error.to_string())),
@@ -166,6 +200,94 @@ impl GenesisLoader {
     #[must_use]
     pub fn resolve_path<P: AsRef<Path>>(path: P) -> PathBuf {
         path.as_ref().to_path_buf()
+    }
+
+    /// Constructs a policy-compliant AOXC-native default genesis configuration
+    /// for the requested network class.
+    fn build_named_default(network_class: NetworkClass) -> Result<GenesisConfig, GenesisError> {
+        let (governance_serial_ordinal, class_instance_ordinal, chain_name, validator_id, seal_id) =
+            match network_class {
+                NetworkClass::PublicMainnet => (
+                    1,
+                    1,
+                    "AOXC AKDENIZ",
+                    "aoxc-validator-mainnet-001",
+                    "aoxc-seal-mainnet-001",
+                ),
+                NetworkClass::PublicTestnet => (
+                    2,
+                    1,
+                    "AOXC Pusula",
+                    "aoxc-validator-testnet-001",
+                    "aoxc-seal-testnet-001",
+                ),
+                NetworkClass::Validation => (
+                    4,
+                    1,
+                    "AOXC Mizan",
+                    "aoxc-validator-validation-001",
+                    "aoxc-seal-validation-001",
+                ),
+                NetworkClass::Devnet => (
+                    3,
+                    1,
+                    "AOXC Kivilcim",
+                    "aoxc-validator-devnet-001",
+                    "aoxc-seal-devnet-001",
+                ),
+                NetworkClass::SovereignPrivate => (
+                    101,
+                    1,
+                    "AOXC Sovereign Private 001",
+                    "aoxc-validator-sovereign-001",
+                    "aoxc-seal-sovereign-001",
+                ),
+                NetworkClass::Consortium => (
+                    201,
+                    1,
+                    "AOXC Consortium 001",
+                    "aoxc-validator-consortium-001",
+                    "aoxc-seal-consortium-001",
+                ),
+                NetworkClass::RegulatedPrivate => (
+                    301,
+                    1,
+                    "AOXC Regulated Private 001",
+                    "aoxc-validator-regulated-001",
+                    "aoxc-seal-regulated-001",
+                ),
+            };
+
+        let identity = ChainIdentity::new(
+            AOXC_FAMILY_ID,
+            network_class,
+            governance_serial_ordinal,
+            class_instance_ordinal,
+            chain_name,
+        )?;
+
+        let treasury_account = GenesisAccount {
+            address: TREASURY_ACCOUNT.to_string(),
+            balance: DEFAULT_TREASURY,
+        };
+
+        let config = GenesisConfig::new(
+            identity,
+            DEFAULT_BLOCK_TIME_MS,
+            vec![Validator {
+                id: validator_id.to_string(),
+            }],
+            vec![treasury_account],
+            DEFAULT_TREASURY,
+            SettlementLink {
+                endpoint: "aoxc://settlement/root".to_string(),
+            },
+            AOXCANDSeal {
+                seal_id: seal_id.to_string(),
+            },
+        )?;
+
+        Ok(config)
     }
 }
 
@@ -222,12 +344,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn load_default_builds_aoxc_mainnet_identity() {
+        let config = GenesisLoader::load_default().expect("default mainnet genesis must build");
+
+        assert_eq!(config.identity.family_id, AOXC_FAMILY_ID);
+        assert_eq!(config.identity.chain_id, 2626000001);
+        assert_eq!(config.identity.network_serial, "2626-001");
+        assert_eq!(config.identity.network_id, "aoxc-mainnet-2626-001");
+        assert_eq!(config.identity.network_class, NetworkClass::PublicMainnet);
+        assert_eq!(config.treasury, DEFAULT_TREASURY);
+        assert_eq!(config.accounts.len(), 1);
+        assert_eq!(config.accounts[0].address, TREASURY_ACCOUNT);
+        assert_eq!(config.accounts[0].balance, DEFAULT_TREASURY);
+    }
+
+    #[test]
+    fn load_default_testnet_builds_aoxc_testnet_identity() {
+        let config = GenesisLoader::load_default_testnet().expect("default testnet genesis must build");
+
+        assert_eq!(config.identity.family_id, AOXC_FAMILY_ID);
+        assert_eq!(config.identity.chain_id, 2626010001);
+        assert_eq!(config.identity.network_serial, "2626-002");
+        assert_eq!(config.identity.network_id, "aoxc-testnet-2626-002");
+        assert_eq!(config.identity.network_class, NetworkClass::PublicTestnet);
+    }
+
+    #[test]
     fn load_returns_validation_error_for_invalid_genesis_file() {
         let temp_dir =
             std::env::temp_dir().join(format!("aoxc-genesis-loader-test-{}", std::process::id()));
         fs::create_dir_all(&temp_dir).expect("temp dir must be created");
+
         let path = temp_dir.join("genesis.json");
-        fs::write(&path, r#"{"chain_id":"","chain_num":1001,"accounts":[],"validators":[],"treasury":0,"block_time":0,"genesis_seal":{"node_sig":null,"ai_sig":null,"dao_sig":null},"settlement_link":{"native_symbol":"AOXC","native_decimals":18,"settlement_network":"xlayer-mainnet","settlement_token_address":"0x1111111111111111111111111111111111111111","settlement_main_contract":"0x2222222222222222222222222222222222222222","settlement_multisig_contract":"0x3333333333333333333333333333333333333333","equivalence_mode":"1:1"}}"#).expect("invalid genesis fixture must write");
+
+        fs::write(
+            &path,
+            r#"{
+                "identity": {
+                    "family_id": 2626,
+                    "chain_id": 1,
+                    "network_serial": "2626-001",
+                    "network_id": "aoxc-mainnet-2626-001",
+                    "chain_name": "AOXC AKDENIZ",
+                    "network_class": "public-mainnet"
+                },
+                "block_time": 0,
+                "validators": [],
+                "accounts": [],
+                "treasury": 0,
+                "settlement_link": { "endpoint": "aoxc://settlement/root" },
+                "genesis_seal": { "seal_id": "aoxc-seal-mainnet-001" }
+            }"#,
+        )
+        .expect("invalid genesis fixture must write");
 
         let err = GenesisLoader::load(&path).expect_err("invalid genesis must be rejected");
         assert!(matches!(err, GenesisError::ValidationError(_)));

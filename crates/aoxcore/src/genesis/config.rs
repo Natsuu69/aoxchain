@@ -1,580 +1,688 @@
-use aoxcunity::Validator;
+//! AOXC canonical genesis configuration model.
+//!
+//! This module defines the forward-compatible genesis identity surface for AOXC.
+//! The design intentionally separates:
+//!
+//! - governance-facing human-readable identifiers,
+//! - protocol-facing numeric identifiers,
+//! - canonical machine-readable network identifiers,
+//! - deterministic genesis hashing inputs.
+//!
+//! The same node binary is expected to support multiple network instances.
+//! Therefore, network identity must be derived from configuration and signed
+//! genesis artifacts rather than compile-time constants.
 
+use core::fmt;
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
-use std::convert::TryFrom;
+use sha2::{Digest, Sha256};
 
-use std::collections::HashSet;
-
-/// Default main chain numeric identifier.
-const DEFAULT_CHAIN_NUM: u32 = 1;
-
-/// Default block time in seconds.
-const DEFAULT_BLOCK_TIME: u64 = 6;
-
-/// Minimum accepted block time in seconds.
-const MIN_BLOCK_TIME: u64 = 1;
-
-/// Maximum accepted block time in seconds.
+/// AOXC governance-controlled family namespace root.
 ///
-/// This upper bound prevents obviously unsafe or nonsensical bootstrap values
-/// while remaining operationally flexible for development and test environments.
-const MAX_BLOCK_TIME: u64 = 600;
+/// This value is intended to remain stable across the AOXC network family.
+/// It is not a network instance discriminator by itself.
+pub const AOXC_FAMILY_ID: u32 = 2626;
 
-/// AOXC namespace prefix used for deterministic chain identifier generation.
-const AOXC_PREFIX: &str = "AOXC";
+/// Canonical AOXC network identifier prefix.
+pub const AOXC_NETWORK_ID_PREFIX: &str = "aoxc";
 
-/// Canonical treasury account identifier used by default bootstrap helpers.
-pub const TREASURY_ACCOUNT: &str = "AOXC_TREASURY";
-
-/// Maximum accepted account address length for genesis records.
-const MAX_ADDRESS_LEN: usize = 128;
-
-/// Maximum accepted validator identifier length in bytes.
-const MAX_VALIDATOR_ID_LEN: usize = 32;
-
-/// Maximum accepted metadata string length.
-const MAX_METADATA_LEN: usize = 256;
-
-/// Runtime-only genesis seal retained for compatibility with the current
-/// bootstrap flow.
+/// Maximum allowed governance serial ordinal.
 ///
-/// This structure is intentionally local to `aoxcore` because the new
-/// `aoxcunity` surface no longer exposes the prior AOXCAND seal type.
-#[derive(Clone, Default, Debug)]
-pub struct AOXCANDSeal {
-    pub node_sig: Option<Vec<u8>>,
-    pub ai_sig: Option<Vec<u8>>,
-    pub dao_sig: Option<Vec<u8>>,
+/// Example:
+/// - `2626-001`
+/// - `2626-999`
+pub const MAX_NETWORK_SERIAL_ORDINAL: u16 = 999;
+
+/// Maximum allowed instance ordinal inside a network class segment.
+///
+/// This preserves a deterministic, bounded identifier policy and prevents
+/// malformed identifiers from entering the system unchecked.
+pub const MAX_NETWORK_INSTANCE_ORDINAL: u32 = 9999;
+
+/// Canonical network class.
+///
+/// The class code is embedded into the numeric `chain_id`.
+/// This allows the protocol layer to distinguish public, test, development,
+/// validation, and private deployment families without relying on string parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NetworkClass {
+    /// Canonical public mainnet line.
+    PublicMainnet,
+
+    /// Canonical public testnet line.
+    PublicTestnet,
+
+    /// Development or experimental network line.
+    Devnet,
+
+    /// Pre-production validation or staging network line.
+    Validation,
+
+    /// Sovereign private Layer 1 deployment line.
+    SovereignPrivate,
+
+    /// Consortium or federated enterprise network line.
+    Consortium,
+
+    /// Regulated or supervised private deployment line.
+    RegulatedPrivate,
 }
 
-impl AOXCANDSeal {
-    /// Creates an empty runtime seal container.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+impl NetworkClass {
+    /// Returns the canonical two-digit class code used in numeric `chain_id`
+    /// derivation.
+    ///
+    /// Numeric chain identifier layout:
+    ///
+    /// `FFFFCCNNNN`
+    ///
+    /// Where:
+    /// - `FFFF` = family id
+    /// - `CC`   = class code
+    /// - `NNNN` = instance ordinal
+    pub const fn class_code(self) -> u16 {
+        match self {
+            Self::PublicMainnet => 0,
+            Self::PublicTestnet => 1,
+            Self::Devnet => 2,
+            Self::Validation => 3,
+            Self::SovereignPrivate => 10,
+            Self::Consortium => 20,
+            Self::RegulatedPrivate => 30,
+        }
     }
 
-    /// Returns true when all seal segments are present.
-    #[must_use]
-    pub fn is_complete(&self) -> bool {
-        self.node_sig.is_some() && self.ai_sig.is_some() && self.dao_sig.is_some()
-    }
-}
-
-/// Represents an account initialized at genesis.
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct GenesisAccount {
-    pub address: String,
-    pub balance: u128,
-}
-
-/// Cross-layer metadata used to bind AOXC native economics to X Layer assets.
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct SettlementLink {
-    /// Native chain currency symbol.
-    pub native_symbol: String,
-    /// Native currency decimals.
-    pub native_decimals: u8,
-    /// Settlement network identifier.
-    pub settlement_network: String,
-    /// Bridged token address on settlement network (EVM hex string).
-    pub settlement_token_address: String,
-    /// Main coordination contract address on settlement network.
-    pub settlement_main_contract: String,
-    /// Multisig governance contract address on settlement network.
-    pub settlement_multisig_contract: String,
-    /// Canonical relationship mode (for now `1:1`).
-    pub equivalence_mode: String,
-}
-
-impl Default for SettlementLink {
-    fn default() -> Self {
-        Self {
-            native_symbol: "AOXC".to_string(),
-            native_decimals: 18,
-            settlement_network: "xlayer".to_string(),
-            settlement_token_address: "0xeb9580c3946bb47d73aae1d4f7a94148b554b2f4".to_string(),
-            settlement_main_contract: "0x97bdd1fd1caf756e00efd42eba9406821465b365".to_string(),
-            settlement_multisig_contract: "0x20c0dd8b6559912acfac2ce061b8d5b19db8ca84".to_string(),
-            equivalence_mode: "1:1".to_string(),
+    /// Returns the canonical machine-readable slug.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Self::PublicMainnet => "mainnet",
+            Self::PublicTestnet => "testnet",
+            Self::Devnet => "devnet",
+            Self::Validation => "validation",
+            Self::SovereignPrivate => "sovereign-private",
+            Self::Consortium => "consortium",
+            Self::RegulatedPrivate => "regulated-private",
         }
     }
 }
 
-/// Genesis configuration used to bootstrap the chain.
-///
-/// Compatibility note:
-/// - `validators` and `genesis_seal` remain runtime-only and are intentionally
-///   excluded from serialized genesis artifacts to preserve the current system
-///   contract and loader behavior.
-/// - `#[serde(skip, default)]` ensures safe deserialization even when these
-///   fields are not present in `genesis.json`.
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct GenesisConfig {
-    /// Numeric chain identifier.
-    pub chain_num: u32,
-
-    /// Human-readable chain identifier.
-    pub chain_id: String,
-
-    /// Block time in seconds.
-    pub block_time: u64,
-
-    /// Validator set injected at runtime.
-    #[serde(skip, default)]
-    pub validators: Vec<Validator>,
-
-    /// Genesis accounts.
-    pub accounts: Vec<GenesisAccount>,
-
-    /// Treasury allocation.
-    ///
-    /// Compatibility note:
-    /// The current model preserves this standalone treasury field because the
-    /// rest of the system already depends on it.
-    pub treasury: u128,
-
-    /// Cross-layer settlement binding metadata.
-    #[serde(default)]
-    pub settlement_link: SettlementLink,
-
-    /// Runtime seal, excluded from persistent serialization.
-    #[serde(skip, default = "default_genesis_seal")]
-    pub genesis_seal: AOXCANDSeal,
-}
-
-impl Default for GenesisConfig {
-    fn default() -> Self {
-        Self::new()
+impl fmt::Display for NetworkClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.slug())
     }
 }
 
-impl GenesisConfig {
-    /// Creates the default AOXC genesis configuration.
-    #[must_use]
-    pub fn new() -> Self {
-        let chain_id = Self::generate_chain_id(DEFAULT_CHAIN_NUM);
+/// Governance-facing chain identity model.
+///
+/// This structure intentionally carries both human-readable and machine-readable
+/// identity fields. These fields should be treated as immutable after genesis
+/// finalization for a given network instance.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainIdentity {
+    /// AOXC family namespace root.
+    pub family_id: u32,
 
-        Self {
-            chain_num: DEFAULT_CHAIN_NUM,
+    /// Canonical protocol-facing numeric chain identifier.
+    ///
+    /// Example:
+    /// - `2626000001` for public mainnet instance 1
+    /// - `2626010001` for public testnet instance 1
+    pub chain_id: u64,
+
+    /// Human-readable governance serial.
+    ///
+    /// Example:
+    /// - `2626-001`
+    /// - `2626-101`
+    pub network_serial: String,
+
+    /// Canonical machine-readable network identifier.
+    ///
+    /// Example:
+    /// - `aoxc-mainnet-2626-001`
+    /// - `aoxc-testnet-2626-002`
+    pub network_id: String,
+
+    /// Human-readable chain display name.
+    ///
+    /// Example:
+    /// - `AOXC Mihver`
+    /// - `AOXC Pusula`
+    pub chain_name: String,
+
+    /// Canonical network class.
+    pub network_class: NetworkClass,
+}
+
+impl ChainIdentity {
+    /// Constructs a canonical chain identity from explicit policy inputs.
+    ///
+    /// This constructor enforces deterministic derivation rules for:
+    /// - `chain_id`
+    /// - `network_serial`
+    /// - `network_id`
+    pub fn new(
+        family_id: u32,
+        network_class: NetworkClass,
+        governance_serial_ordinal: u16,
+        class_instance_ordinal: u32,
+        chain_name: impl Into<String>,
+    ) -> Result<Self, GenesisConfigError> {
+        if governance_serial_ordinal == 0 || governance_serial_ordinal > MAX_NETWORK_SERIAL_ORDINAL {
+            return Err(GenesisConfigError::InvalidNetworkSerialOrdinal {
+                value: governance_serial_ordinal,
+            });
+        }
+
+        if class_instance_ordinal == 0 || class_instance_ordinal > MAX_NETWORK_INSTANCE_ORDINAL {
+            return Err(GenesisConfigError::InvalidClassInstanceOrdinal {
+                value: class_instance_ordinal,
+            });
+        }
+
+        let network_serial = build_network_serial(family_id, governance_serial_ordinal);
+        let chain_id = build_chain_id(family_id, network_class, class_instance_ordinal)?;
+        let network_id = build_network_id(network_class, &network_serial);
+
+        let identity = Self {
+            family_id,
             chain_id,
-            block_time: DEFAULT_BLOCK_TIME,
-            validators: Vec::with_capacity(16),
-            accounts: Vec::with_capacity(64),
-            treasury: 0,
-            settlement_link: SettlementLink::default(),
-            genesis_seal: AOXCANDSeal::new(),
-        }
+            network_serial,
+            network_id,
+            chain_name: chain_name.into(),
+            network_class,
+        };
+
+        identity.validate()?;
+        Ok(identity)
     }
 
-    /// Generates a deterministic chain identifier from the numeric chain number.
-    #[must_use]
-    pub fn generate_chain_id(num: u32) -> String {
-        format!("{}-{:04}-MAIN", AOXC_PREFIX, num)
-    }
-
-    /// Adds a validator if the validator identifier is unique.
-    ///
-    /// Runtime-only validators remain outside the serialized genesis payload,
-    /// but duplicate validator identifiers are still rejected in-memory.
-    pub fn add_validator(&mut self, validator: Validator) {
-        if self
-            .validators
-            .iter()
-            .any(|existing| existing.id == validator.id)
-        {
-            return;
+    /// Validates canonical identity invariants.
+    pub fn validate(&self) -> Result<(), GenesisConfigError> {
+        if self.family_id == 0 {
+            return Err(GenesisConfigError::InvalidFamilyId);
         }
 
-        self.validators.push(validator);
-    }
-
-    /// Adds a genesis account if the address is unique.
-    ///
-    /// This helper preserves the current void-return contract and performs
-    /// duplicate suppression rather than failing loudly.
-    pub fn add_account(&mut self, address: String, balance: u128) {
-        if self
-            .accounts
-            .iter()
-            .any(|account| account.address == address)
-        {
-            return;
+        if self.chain_name.trim().is_empty() {
+            return Err(GenesisConfigError::EmptyChainName);
         }
 
-        self.accounts.push(GenesisAccount { address, balance });
-    }
+        validate_network_serial(self.family_id, &self.network_serial)?;
+        validate_network_id(self.network_class, &self.network_serial, &self.network_id)?;
 
-    /// Calculates the total supply defined in genesis.
-    ///
-    /// Compatibility behavior:
-    /// - The method includes the standalone treasury allocation.
-    /// - If the canonical treasury account is also present in `accounts`,
-    ///   its balance is excluded from the account loop to avoid double-counting.
-    #[must_use]
-    pub fn total_supply(&self) -> u128 {
-        let mut total = self.treasury;
+        let expected_prefix = expected_chain_id_prefix(self.family_id, self.network_class);
+        let actual_prefix = self.chain_id / 10_000;
 
-        for account in &self.accounts {
-            if account.address == TREASURY_ACCOUNT {
-                continue;
-            }
-
-            total = total.saturating_add(account.balance);
+        if actual_prefix != expected_prefix {
+            return Err(GenesisConfigError::ChainIdPrefixMismatch {
+                expected_prefix,
+                actual_prefix,
+            });
         }
 
-        total
-    }
-
-    /// Validates structural integrity of the genesis configuration.
-    ///
-    /// Validation scope intentionally remains compatible with the current model:
-    /// - runtime-only validator and seal fields are allowed but not required
-    ///   for serialized genesis integrity;
-    /// - treasury remains a standalone field;
-    /// - chain id must match the deterministic chain number derivation.
-    pub fn validate(&self) -> Result<(), String> {
-        if self.chain_num == 0 {
-            return Err("GENESIS: invalid chain number".into());
+        let instance_ordinal = self.chain_id % 10_000;
+        if instance_ordinal == 0 || instance_ordinal > u64::from(MAX_NETWORK_INSTANCE_ORDINAL) {
+            return Err(GenesisConfigError::InvalidDerivedChainIdOrdinal {
+                value: instance_ordinal,
+            });
         }
-
-        let expected_chain_id = Self::generate_chain_id(self.chain_num);
-        if self.chain_id != expected_chain_id {
-            return Err(format!(
-                "GENESIS: chain id mismatch, expected {} got {}",
-                expected_chain_id, self.chain_id
-            ));
-        }
-
-        if !(MIN_BLOCK_TIME..=MAX_BLOCK_TIME).contains(&self.block_time) {
-            return Err(format!(
-                "GENESIS: block time must be within {}..={} seconds",
-                MIN_BLOCK_TIME, MAX_BLOCK_TIME
-            ));
-        }
-
-        let mut seen_accounts: HashSet<&str> = HashSet::with_capacity(self.accounts.len());
-
-        for account in &self.accounts {
-            if !is_valid_address(&account.address) {
-                return Err(format!(
-                    "GENESIS: invalid account address {}",
-                    account.address
-                ));
-            }
-
-            if !seen_accounts.insert(account.address.as_str()) {
-                return Err(format!("GENESIS: duplicate account {}", account.address));
-            }
-
-            if account.balance == 0 {
-                return Err(format!("GENESIS: zero balance account {}", account.address));
-            }
-        }
-
-        let mut seen_validators: HashSet<[u8; 32]> = HashSet::with_capacity(self.validators.len());
-
-        for validator in &self.validators {
-            if validator.id == [0u8; 32] {
-                return Err("GENESIS: validator id missing".into());
-            }
-
-            if validator.id.len() > MAX_VALIDATOR_ID_LEN {
-                return Err(format!(
-                    "GENESIS: validator id too long {:02x?}",
-                    validator.id
-                ));
-            }
-
-            if !seen_validators.insert(validator.id) {
-                return Err(format!(
-                    "GENESIS: duplicate validator {:02x?}",
-                    validator.id
-                ));
-            }
-        }
-
-        validate_settlement_link(&self.settlement_link)?;
 
         Ok(())
     }
 
-    /// Computes the deterministic genesis state hash.
+    /// Returns a deterministic fingerprint for the identity itself.
     ///
-    /// Compatibility design:
-    /// - runtime-only fields (`validators`, `genesis_seal`) remain excluded;
-    /// - accounts are canonically ordered by address before hashing;
-    /// - the serialized hash input is stable across insertion-order differences.
-    pub fn try_state_hash(&self) -> Result<String, String> {
-        #[derive(Serialize)]
-        struct CanonicalGenesisConfig<'a> {
-            chain_num: u32,
-            chain_id: &'a str,
-            block_time: u64,
-            accounts: Vec<&'a GenesisAccount>,
-            treasury: u128,
-            settlement_link: &'a SettlementLink,
-        }
+    /// This is not a signature and must not be treated as such.
+    #[must_use]
+    pub fn fingerprint_hex(&self) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(self.family_id.to_le_bytes());
+        hasher.update(self.chain_id.to_le_bytes());
+        hasher.update(self.network_serial.as_bytes());
+        hasher.update(self.network_id.as_bytes());
+        hasher.update(self.chain_name.as_bytes());
+        hasher.update(self.network_class.slug().as_bytes());
+        hex::encode(hasher.finalize())
+    }
+}
 
-        let mut accounts: Vec<&GenesisAccount> = self.accounts.iter().collect();
-        accounts.sort_by(|left, right| left.address.cmp(&right.address));
+/// Genesis configuration root.
+///
+/// This structure is intentionally designed to remain stable and extensible.
+/// Additional policy or provenance fields may be appended in future versions
+/// without changing the core identity derivation model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GenesisConfig {
+    /// Canonical chain identity.
+    pub identity: ChainIdentity,
 
-        let canonical = CanonicalGenesisConfig {
-            chain_num: self.chain_num,
-            chain_id: &self.chain_id,
-            block_time: self.block_time,
+    /// Block target time in milliseconds.
+    pub block_time: u64,
+
+    /// Genesis validators.
+    pub validators: Vec<Validator>,
+
+    /// Genesis accounts and their initial balances / permissions.
+    pub accounts: Vec<GenesisAccount>,
+
+    /// Initial treasury allocation.
+    pub treasury: u128,
+
+    /// Settlement anchoring configuration.
+    pub settlement_link: SettlementLink,
+
+    /// AOXC genesis seal material.
+    pub genesis_seal: AOXCANDSeal,
+}
+
+impl GenesisConfig {
+    /// Constructs a new genesis configuration.
+    pub fn new(
+        identity: ChainIdentity,
+        block_time: u64,
+        validators: Vec<Validator>,
+        accounts: Vec<GenesisAccount>,
+        treasury: u128,
+        settlement_link: SettlementLink,
+        genesis_seal: AOXCANDSeal,
+    ) -> Result<Self, GenesisConfigError> {
+        let cfg = Self {
+            identity,
+            block_time,
+            validators,
             accounts,
-            treasury: self.treasury,
-            settlement_link: &self.settlement_link,
+            treasury,
+            settlement_link,
+            genesis_seal,
         };
 
-        let encoded = serde_json::to_vec(&canonical)
-            .map_err(|error| format!("GENESIS_HASH: canonical serialization failure: {error}"))?;
-
-        let mut hasher = Sha3_256::new();
-        hasher.update(encoded);
-
-        let digest = hasher.finalize();
-        Ok(hex::encode(digest))
+        cfg.validate()?;
+        Ok(cfg)
     }
 
-    /// Computes the deterministic genesis state hash.
-    ///
-    /// This compatibility wrapper preserves the historic infallible API for
-    /// callers that have already validated the configuration.
-    #[must_use]
-    pub fn state_hash(&self) -> String {
-        self.try_state_hash()
-            .expect("GENESIS_HASH: validated genesis config must serialize canonically")
+    /// Returns a canonical public mainnet identity helper.
+    pub fn mainnet_identity(chain_name: impl Into<String>) -> Result<ChainIdentity, GenesisConfigError> {
+        ChainIdentity::new(
+            AOXC_FAMILY_ID,
+            NetworkClass::PublicMainnet,
+            1,
+            1,
+            chain_name,
+        )
     }
 
-    /// Computes a lightweight deterministic fingerprint for quick identity checks.
-    ///
-    /// The fingerprint follows the same canonical account ordering strategy used
-    /// by `state_hash()` to avoid insertion-order drift.
-    #[must_use]
-    pub fn fingerprint(&self) -> String {
-        let mut hasher = Sha3_256::new();
+    /// Returns a canonical public testnet identity helper.
+    pub fn testnet_identity(chain_name: impl Into<String>) -> Result<ChainIdentity, GenesisConfigError> {
+        ChainIdentity::new(
+            AOXC_FAMILY_ID,
+            NetworkClass::PublicTestnet,
+            2,
+            1,
+            chain_name,
+        )
+    }
 
-        hasher.update(self.chain_id.as_bytes());
-        hasher.update(self.chain_num.to_be_bytes());
-        hasher.update(self.block_time.to_be_bytes());
-        hasher.update(self.treasury.to_be_bytes());
-        hasher.update(self.settlement_link.native_symbol.as_bytes());
-        hasher.update([self.settlement_link.native_decimals]);
-        hasher.update(self.settlement_link.settlement_network.as_bytes());
-        hasher.update(self.settlement_link.settlement_token_address.as_bytes());
-        hasher.update(self.settlement_link.settlement_main_contract.as_bytes());
-        hasher.update(self.settlement_link.settlement_multisig_contract.as_bytes());
-        hasher.update(self.settlement_link.equivalence_mode.as_bytes());
+    /// Validates genesis invariants.
+    pub fn validate(&self) -> Result<(), GenesisConfigError> {
+        self.identity.validate()?;
 
-        let mut accounts: Vec<&GenesisAccount> = self.accounts.iter().collect();
-        accounts.sort_by(|left, right| left.address.cmp(&right.address));
-
-        for account in accounts {
-            hasher.update(account.address.as_bytes());
-            hasher.update(account.balance.to_be_bytes());
+        if self.block_time == 0 {
+            return Err(GenesisConfigError::InvalidBlockTime);
         }
 
+        if self.validators.is_empty() {
+            return Err(GenesisConfigError::EmptyValidators);
+        }
+
+        if self.accounts.is_empty() {
+            return Err(GenesisConfigError::EmptyAccounts);
+        }
+
+        Ok(())
+    }
+
+    /// Computes a deterministic state fingerprint for the genesis configuration.
+    ///
+    /// This function intentionally includes identity material so that network
+    /// identity drift cannot silently produce the same genesis fingerprint.
+    pub fn try_state_hash(&self) -> Result<[u8; 32], GenesisConfigError> {
+        self.validate()?;
+
+        let mut hasher = Sha256::new();
+
+        hasher.update(self.identity.family_id.to_le_bytes());
+        hasher.update(self.identity.chain_id.to_le_bytes());
+        hasher.update(self.identity.network_serial.as_bytes());
+        hasher.update(self.identity.network_id.as_bytes());
+        hasher.update(self.identity.chain_name.as_bytes());
+        hasher.update(self.identity.network_class.slug().as_bytes());
+
+        hasher.update(self.block_time.to_le_bytes());
+        hasher.update(self.treasury.to_le_bytes());
+
+        for validator in &self.validators {
+            hasher.update(format!("{validator:?}").as_bytes());
+        }
+
+        for account in &self.accounts {
+            hasher.update(format!("{account:?}").as_bytes());
+        }
+
+        hasher.update(format!("{:?}", self.settlement_link).as_bytes());
+        hasher.update(format!("{:?}", self.genesis_seal).as_bytes());
+
         let digest = hasher.finalize();
-        hex::encode(digest)
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&digest);
+        Ok(out)
     }
 
-    /// Attaches the node seal payload.
-    pub fn seal_with_node(&mut self, signature: Vec<u8>) {
-        self.genesis_seal.node_sig = Some(signature);
-    }
-
-    /// Attaches the AI verification seal payload.
-    pub fn seal_with_ai(&mut self, signature: Vec<u8>) {
-        self.genesis_seal.ai_sig = Some(signature);
-    }
-
-    /// Attaches the DAO approval seal payload.
-    pub fn seal_with_dao(&mut self, signature: Vec<u8>) {
-        self.genesis_seal.dao_sig = Some(signature);
-    }
-
-    /// Returns true when the runtime genesis seal is complete.
-    #[must_use]
-    pub fn is_sealed(&self) -> bool {
-        self.genesis_seal.is_complete()
+    /// Returns the hex-encoded deterministic genesis fingerprint.
+    pub fn fingerprint(&self) -> Result<String, GenesisConfigError> {
+        Ok(hex::encode(self.try_state_hash()?))
     }
 }
 
-/// Immutable block used to bootstrap the chain.
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct GenesisBlock {
-    /// Chain identifier.
-    pub chain_id: String,
-
-    /// Genesis timestamp in UNIX seconds.
-    pub timestamp: u64,
-
-    /// Genesis configuration.
-    pub config: GenesisConfig,
-
-    /// Deterministic state hash.
-    pub state_hash: String,
-}
-
-impl GenesisBlock {
-    /// Creates a genesis block from configuration with explicit error handling.
-    pub fn try_new(config: GenesisConfig) -> Result<Self, String> {
-        config.validate()?;
-
-        let timestamp = u64::try_from(chrono::Utc::now().timestamp())
-            .map_err(|_| "GENESIS_BLOCK: timestamp must be non-negative".to_string())?;
-        let state_hash = config.try_state_hash()?;
-
-        Ok(Self {
-            chain_id: config.chain_id.clone(),
-            timestamp,
-            config,
-            state_hash,
-        })
-    }
-
-    /// Creates a genesis block from configuration.
-    ///
-    /// This constructor preserves the current infallible API contract.
-    /// Invalid configuration is treated as a bootstrap invariant violation.
-    #[must_use]
-    pub fn new(config: GenesisConfig) -> Self {
-        Self::try_new(config).expect("GENESIS_BLOCK: invalid genesis configuration")
-    }
-
-    /// Creates a default genesis block.
-    ///
-    /// Compatibility behavior is preserved:
-    /// - treasury is funded;
-    /// - the canonical treasury account is inserted into `accounts`.
-    ///
-    /// `total_supply()` is hardened to avoid double-counting this treasury entry.
-    pub fn new_default() -> Result<Self, String> {
-        let mut config = GenesisConfig::new();
-
-        config.treasury = 1_000_000_000;
-        config.add_account(TREASURY_ACCOUNT.to_string(), 1_000_000_000);
-
-        Ok(Self::new(config))
-    }
-}
-
-/// Provides the default runtime genesis seal for deserialization paths.
-fn default_genesis_seal() -> AOXCANDSeal {
-    AOXCANDSeal::new()
-}
-
-/// Returns true when an account address conforms to the current genesis policy.
+/// Canonical numeric chain identifier builder.
 ///
-/// Current policy:
-/// - non-empty after trimming;
-/// - bounded maximum length;
-/// - ASCII alphanumeric, underscore, hyphen, and dot are allowed.
-fn is_valid_address(value: &str) -> bool {
-    let trimmed = value.trim();
-
-    if trimmed.is_empty() || trimmed.len() > MAX_ADDRESS_LEN {
-        return false;
+/// Format:
+/// `FFFFCCNNNN`
+///
+/// Example:
+/// - family `2626`, class `00`, instance `0001` => `2626000001`
+/// - family `2626`, class `01`, instance `0001` => `2626010001`
+pub fn build_chain_id(
+    family_id: u32,
+    network_class: NetworkClass,
+    class_instance_ordinal: u32,
+) -> Result<u64, GenesisConfigError> {
+    if family_id == 0 {
+        return Err(GenesisConfigError::InvalidFamilyId);
     }
 
-    trimmed
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.')
+    if class_instance_ordinal == 0 || class_instance_ordinal > MAX_NETWORK_INSTANCE_ORDINAL {
+        return Err(GenesisConfigError::InvalidClassInstanceOrdinal {
+            value: class_instance_ordinal,
+        });
+    }
+
+    let class_code = u64::from(network_class.class_code());
+    let family = u64::from(family_id);
+    let ordinal = u64::from(class_instance_ordinal);
+
+    Ok((family * 1_000_000) + (class_code * 10_000) + ordinal)
 }
 
-fn validate_settlement_link(link: &SettlementLink) -> Result<(), String> {
-    let symbol = link.native_symbol.trim();
-    if symbol.is_empty() || symbol.len() > 16 || !symbol.chars().all(|ch| ch.is_ascii_uppercase()) {
-        return Err(
-            "GENESIS: settlement native_symbol must be uppercase ASCII and <=16 chars".to_string(),
-        );
+/// Canonical governance serial builder.
+///
+/// Format:
+/// `FFFF-NNN`
+#[must_use]
+pub fn build_network_serial(family_id: u32, governance_serial_ordinal: u16) -> String {
+    format!("{family_id}-{governance_serial_ordinal:03}")
+}
+
+/// Canonical machine-readable network identifier builder.
+///
+/// Format:
+/// `aoxc-<class>-<family>-<ordinal>`
+#[must_use]
+pub fn build_network_id(network_class: NetworkClass, network_serial: &str) -> String {
+    format!(
+        "{}-{}-{}",
+        AOXC_NETWORK_ID_PREFIX,
+        network_class.slug(),
+        network_serial.to_ascii_lowercase()
+    )
+}
+
+/// Validates governance serial shape.
+///
+/// Expected format:
+/// - `<family_id>-<3 digit ordinal>`
+/// - Example: `2626-001`
+pub fn validate_network_serial(
+    expected_family_id: u32,
+    network_serial: &str,
+) -> Result<(), GenesisConfigError> {
+    let Some((family, ordinal)) = network_serial.split_once('-') else {
+        return Err(GenesisConfigError::MalformedNetworkSerial);
+    };
+
+    let parsed_family = family
+        .parse::<u32>()
+        .map_err(|_| GenesisConfigError::MalformedNetworkSerial)?;
+
+    if parsed_family != expected_family_id {
+        return Err(GenesisConfigError::NetworkSerialFamilyMismatch {
+            expected: expected_family_id,
+            actual: parsed_family,
+        });
     }
 
-    if link.native_decimals > 30 {
-        return Err("GENESIS: settlement native_decimals must be <= 30".to_string());
+    if ordinal.len() != 3 || !ordinal.chars().all(|c| c.is_ascii_digit()) {
+        return Err(GenesisConfigError::MalformedNetworkSerial);
     }
 
-    if link.settlement_network.trim().is_empty() || link.settlement_network.len() > 32 {
-        return Err("GENESIS: settlement network id is invalid".to_string());
-    }
+    let parsed_ordinal = ordinal
+        .parse::<u16>()
+        .map_err(|_| GenesisConfigError::MalformedNetworkSerial)?;
 
-    if link.equivalence_mode.trim().is_empty() || link.equivalence_mode.len() > 16 {
-        return Err("GENESIS: settlement equivalence_mode is invalid".to_string());
-    }
-
-    for (label, value) in [
-        ("settlement_token_address", &link.settlement_token_address),
-        ("settlement_main_contract", &link.settlement_main_contract),
-        (
-            "settlement_multisig_contract",
-            &link.settlement_multisig_contract,
-        ),
-    ] {
-        if value.len() > MAX_METADATA_LEN || !is_valid_evm_address(value) {
-            return Err(format!("GENESIS: invalid {}", label));
-        }
+    if parsed_ordinal == 0 || parsed_ordinal > MAX_NETWORK_SERIAL_ORDINAL {
+        return Err(GenesisConfigError::InvalidNetworkSerialOrdinal {
+            value: parsed_ordinal,
+        });
     }
 
     Ok(())
 }
 
-fn is_valid_evm_address(value: &str) -> bool {
-    let trimmed = value.trim();
-    if trimmed.len() != 42 || !trimmed.starts_with("0x") {
-        return false;
+/// Validates canonical machine-readable network identifier shape.
+pub fn validate_network_id(
+    network_class: NetworkClass,
+    network_serial: &str,
+    network_id: &str,
+) -> Result<(), GenesisConfigError> {
+    let expected = build_network_id(network_class, network_serial);
+    if network_id != expected {
+        return Err(GenesisConfigError::NetworkIdMismatch {
+            expected,
+            actual: network_id.to_owned(),
+        });
     }
 
-    trimmed[2..].chars().all(|ch| ch.is_ascii_hexdigit())
+    Ok(())
+}
+
+/// Returns the expected `FFFFCC` prefix segment of the numeric `chain_id`.
+fn expected_chain_id_prefix(family_id: u32, network_class: NetworkClass) -> u64 {
+    (u64::from(family_id) * 100) + u64::from(network_class.class_code())
+}
+
+/// Genesis configuration validation error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GenesisConfigError {
+    InvalidFamilyId,
+    EmptyChainName,
+    InvalidBlockTime,
+    EmptyValidators,
+    EmptyAccounts,
+    MalformedNetworkSerial,
+    InvalidNetworkSerialOrdinal { value: u16 },
+    InvalidClassInstanceOrdinal { value: u32 },
+    InvalidDerivedChainIdOrdinal { value: u64 },
+    NetworkSerialFamilyMismatch { expected: u32, actual: u32 },
+    NetworkIdMismatch { expected: String, actual: String },
+    ChainIdPrefixMismatch { expected_prefix: u64, actual_prefix: u64 },
+}
+
+impl fmt::Display for GenesisConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidFamilyId => {
+                f.write_str("genesis configuration validation failed: family_id must be non-zero")
+            }
+            Self::EmptyChainName => {
+                f.write_str("genesis configuration validation failed: chain_name must not be empty")
+            }
+            Self::InvalidBlockTime => {
+                f.write_str("genesis configuration validation failed: block_time must be non-zero")
+            }
+            Self::EmptyValidators => {
+                f.write_str("genesis configuration validation failed: validator set must not be empty")
+            }
+            Self::EmptyAccounts => {
+                f.write_str("genesis configuration validation failed: account set must not be empty")
+            }
+            Self::MalformedNetworkSerial => {
+                f.write_str("genesis configuration validation failed: network_serial format is invalid")
+            }
+            Self::InvalidNetworkSerialOrdinal { value } => {
+                write!(
+                    f,
+                    "genesis configuration validation failed: network serial ordinal `{value}` is outside policy bounds"
+                )
+            }
+            Self::InvalidClassInstanceOrdinal { value } => {
+                write!(
+                    f,
+                    "genesis configuration validation failed: class instance ordinal `{value}` is outside policy bounds"
+                )
+            }
+            Self::InvalidDerivedChainIdOrdinal { value } => {
+                write!(
+                    f,
+                    "genesis configuration validation failed: derived chain_id ordinal `{value}` is invalid"
+                )
+            }
+            Self::NetworkSerialFamilyMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "genesis configuration validation failed: network_serial family mismatch; expected `{expected}`, got `{actual}`"
+                )
+            }
+            Self::NetworkIdMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "genesis configuration validation failed: network_id mismatch; expected `{expected}`, got `{actual}`"
+                )
+            }
+            Self::ChainIdPrefixMismatch {
+                expected_prefix,
+                actual_prefix,
+            } => {
+                write!(
+                    f,
+                    "genesis configuration validation failed: chain_id prefix mismatch; expected `{expected_prefix}`, got `{actual_prefix}`"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for GenesisConfigError {}
+
+/// The project should replace these placeholder integration types with the
+/// real canonical domain types already defined in AOXC.
+///
+/// They are included here only to make the model structurally complete.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Validator {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GenesisAccount {
+    pub address: String,
+    pub balance: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SettlementLink {
+    pub endpoint: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AOXCANDSeal {
+    pub seal_id: String,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{GenesisConfig, SettlementLink};
+    use super::*;
 
     #[test]
-    fn settlement_defaults_are_valid() {
-        let cfg = GenesisConfig::new();
-        assert!(cfg.validate().is_ok());
+    fn builds_public_mainnet_chain_id_correctly() {
+        let chain_id = build_chain_id(AOXC_FAMILY_ID, NetworkClass::PublicMainnet, 1).unwrap();
+        assert_eq!(chain_id, 2626000001);
     }
 
     #[test]
-    fn settlement_invalid_token_address_is_rejected() {
-        let mut cfg = GenesisConfig::new();
-        cfg.settlement_link.settlement_token_address = "bad-address".to_string();
-        assert!(cfg.validate().is_err());
+    fn builds_public_testnet_chain_id_correctly() {
+        let chain_id = build_chain_id(AOXC_FAMILY_ID, NetworkClass::PublicTestnet, 1).unwrap();
+        assert_eq!(chain_id, 2626010001);
     }
 
     #[test]
-    fn settlement_link_changes_hash() {
-        let mut first = GenesisConfig::new();
-        let second = GenesisConfig::new();
-
-        first.settlement_link = SettlementLink {
-            settlement_network: "xlayer-alt".to_string(),
-            ..first.settlement_link.clone()
-        };
-
-        assert_ne!(first.state_hash(), second.state_hash());
+    fn builds_network_serial_correctly() {
+        assert_eq!(build_network_serial(2626, 1), "2626-001");
+        assert_eq!(build_network_serial(2626, 12), "2626-012");
     }
 
     #[test]
-    fn try_new_rejects_invalid_genesis_config_without_panicking() {
-        let mut cfg = GenesisConfig::new();
-        cfg.chain_id.clear();
-
-        let err = super::GenesisBlock::try_new(cfg).expect_err("invalid config must be rejected");
-        assert!(err.starts_with("GENESIS:"));
+    fn builds_network_id_correctly() {
+        let network_id = build_network_id(NetworkClass::PublicMainnet, "2626-001");
+        assert_eq!(network_id, "aoxc-mainnet-2626-001");
     }
 
     #[test]
-    fn new_panics_for_invalid_genesis_config() {
-        let mut cfg = GenesisConfig::new();
-        cfg.chain_id.clear();
+    fn validates_chain_identity_successfully() {
+        let identity = ChainIdentity::new(
+            AOXC_FAMILY_ID,
+            NetworkClass::PublicMainnet,
+            1,
+            1,
+            "AOXC Mihver",
+        )
+        .unwrap();
 
-        let err = super::GenesisBlock::try_new(cfg).expect_err("invalid config must be rejected");
-        assert!(err.starts_with("GENESIS:"));
+        assert_eq!(identity.chain_id, 2626000001);
+        assert_eq!(identity.network_serial, "2626-001");
+        assert_eq!(identity.network_id, "aoxc-mainnet-2626-001");
+    }
+
+    #[test]
+    fn genesis_fingerprint_is_deterministic() {
+        let identity = ChainIdentity::new(
+            AOXC_FAMILY_ID,
+            NetworkClass::PublicMainnet,
+            1,
+            1,
+            "AOXC Mihver",
+        )
+        .unwrap();
+
+        let cfg = GenesisConfig::new(
+            identity,
+            3000,
+            vec![Validator { id: "val-1".into() }],
+            vec![GenesisAccount {
+                address: "aox1test".into(),
+                balance: 1_000_000,
+            }],
+            10_000_000,
+            SettlementLink {
+                endpoint: "settlement://root".into(),
+            },
+            AOXCANDSeal {
+                seal_id: "seal-001".into(),
+            },
+        )
+        .unwrap();
+
+        let fp1 = cfg.fingerprint().unwrap();
+        let fp2 = cfg.fingerprint().unwrap();
+
+        assert_eq!(fp1, fp2);
     }
 }
