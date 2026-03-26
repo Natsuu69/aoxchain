@@ -1,12 +1,21 @@
-use serde::Serialize;
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use serde::{Deserialize, Serialize};
 use std::{
+    ffi::OsStr,
     fs,
     path::{Path, PathBuf},
+    process::Stdio,
+    time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::process::Command;
 
 type AppResult<T> = Result<T, String>;
 
-#[derive(Debug, Clone, Serialize)]
+const AOXC_BIN_PACKAGE: &str = "aoxcmd";
+const AOXC_PROGRESS_REPORT: &str = "AOXC_PROGRESS_REPORT.md";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReadinessTrack {
     name: String,
@@ -15,7 +24,7 @@ struct ReadinessTrack {
     status: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LaunchBlocker {
     title: String,
@@ -23,7 +32,7 @@ struct LaunchBlocker {
     command: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FileStatus {
     label: String,
@@ -31,7 +40,7 @@ struct FileStatus {
     exists: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AreaProgress {
     name: String,
@@ -40,7 +49,7 @@ struct AreaProgress {
     status: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NodeControl {
     id: String,
@@ -54,7 +63,7 @@ struct NodeControl {
     command: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WalletSurface {
     title: String,
@@ -65,7 +74,7 @@ struct WalletSurface {
     detail: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TelemetrySurface {
     title: String,
@@ -74,7 +83,7 @@ struct TelemetrySurface {
     detail: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReportAsset {
     title: String,
@@ -83,15 +92,16 @@ struct ReportAsset {
     detail: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CommandPreset {
     title: String,
     command: String,
     intent: String,
+    risk_level: RiskLevel,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceSurface {
     name: String,
@@ -101,7 +111,7 @@ struct WorkspaceSurface {
     summary: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AiSurface {
     name: String,
@@ -111,7 +121,75 @@ struct AiSurface {
     command: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EnvironmentSurface {
+    kind: EnvironmentKind,
+    label: String,
+    profile: String,
+    config_path: String,
+    home_path: String,
+    chain_id: String,
+    rpc_addr: String,
+    security_mode: String,
+    readiness_status: String,
+    config_exists: bool,
+    home_exists: bool,
+    genesis_exists: bool,
+    notes: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExecutionArtifact {
+    label: String,
+    path: String,
+    exists: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandExecutionResult {
+    action: DesktopAction,
+    environment: EnvironmentKind,
+    status: ExecutionStatus,
+    risk_level: RiskLevel,
+    command: String,
+    args: Vec<String>,
+    working_directory: String,
+    started_at_unix_ms: u128,
+    finished_at_unix_ms: u128,
+    duration_ms: u128,
+    exit_code: Option<i32>,
+    stdout: String,
+    stderr: String,
+    artifacts: Vec<ExecutionArtifact>,
+    next_steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandExecutionRequest {
+    action: DesktopAction,
+    environment: EnvironmentKind,
+    options: Option<ActionOptions>,
+    confirmation_phrase: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ActionOptions {
+    home: Option<String>,
+    profile: Option<String>,
+    format: Option<String>,
+    rounds: Option<u32>,
+    sleep_ms: Option<u64>,
+    redact: Option<bool>,
+    enforce: Option<bool>,
+    scenario: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ControlCenterSnapshot {
     stage: String,
@@ -130,12 +208,55 @@ struct ControlCenterSnapshot {
     commands: Vec<CommandPreset>,
     workspaces: Vec<WorkspaceSurface>,
     ai_surfaces: Vec<AiSurface>,
+    environments: Vec<EnvironmentSurface>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum EnvironmentKind {
+    Localnet,
+    Testnet,
+    Mainnet,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum DesktopAction {
+    MainnetReadiness,
+    FullSurfaceReadiness,
+    RuntimeStatus,
+    ProductionAudit,
+    DiagnosticsBundle,
+    ConfigValidate,
+    ConfigPrint,
+    NodeBootstrap,
+    NodeHealth,
+    NodeRun,
+    NetworkSmoke,
+    RealNetworkValidation,
+    LaunchDeterministicCluster,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum ExecutionStatus {
+    Succeeded,
+    Failed,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum RiskLevel {
+    Low,
+    Medium,
+    High,
 }
 
 #[tauri::command]
 fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
     let repo_root = repo_root()?;
-    let report_path = repo_root.join("AOXC_PROGRESS_REPORT.md");
+    let report_path = repo_root.join(AOXC_PROGRESS_REPORT);
     let report = fs::read_to_string(&report_path)
         .map_err(|err| format!("failed to read {}: {err}", report_path.display()))?;
 
@@ -159,16 +280,18 @@ fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
     let commands = command_presets();
     let workspaces = discover_workspace_surfaces(&repo_root)?;
     let ai_surfaces = discover_ai_surfaces(&repo_root)?;
+    let environments = discover_environments(&repo_root);
 
     let desktop_surface_percent = desktop_percent(overall_percent, &nodes, &reports);
 
     let summary = format!(
-        "{} blocker(s), {} workspace surface(s), {} AI surface(s), {} node control surface(s), and {} report asset(s) are currently exposed through AOXHub desktop.",
+        "{} blocker(s), {} environment(s), {} node surface(s), {} report asset(s), {} workspace surface(s), and {} AI surface(s) are exposed through AOXHub desktop.",
         blockers.len(),
-        workspaces.len(),
-        ai_surfaces.len(),
+        environments.len(),
         nodes.len(),
-        reports.len()
+        reports.len(),
+        workspaces.len(),
+        ai_surfaces.len()
     );
 
     Ok(ControlCenterSnapshot {
@@ -187,16 +310,15 @@ fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
             ReadinessTrack {
                 name: "Testnet readiness".to_string(),
                 percent: testnet_percent,
-                summary:
-                    "Testnet should close non-mainnet blockers and sustain AOXHub/core parity."
-                        .to_string(),
+                summary: "Testnet should close non-mainnet blockers and sustain AOXHub/core parity."
+                    .to_string(),
                 status: status_from_percent(testnet_percent).to_string(),
             },
             ReadinessTrack {
                 name: "Desktop control center".to_string(),
                 percent: desktop_surface_percent,
                 summary: format!(
-                    "Current release stage: {stage}. Active profile: {profile}. Desktop panel unifies node, wallet, telemetry, evidence, workspace, and AI control planes."
+                    "Current release stage: {stage}. Active profile: {profile}. Desktop panel unifies node, wallet, telemetry, evidence, workspace, and operator control planes."
                 ),
                 status: status_from_percent(desktop_surface_percent).to_string(),
             },
@@ -211,7 +333,555 @@ fn load_control_center_snapshot() -> AppResult<ControlCenterSnapshot> {
         commands,
         workspaces,
         ai_surfaces,
+        environments,
     })
+}
+
+#[tauri::command]
+async fn run_desktop_action(request: CommandExecutionRequest) -> AppResult<CommandExecutionResult> {
+    let repo_root = repo_root()?;
+    validate_action_request(&request)?;
+
+    let spec = build_action_spec(&repo_root, &request)?;
+    let started = unix_ms_now();
+
+    let mut command = if spec.program == "script" {
+        let script_path = spec
+            .script_path
+            .clone()
+            .ok_or_else(|| "missing script path for script action".to_string())?;
+        let cmd = Command::new(script_path);
+        cmd
+    } else {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("run")
+            .arg("-q")
+            .arg("-p")
+            .arg(AOXC_BIN_PACKAGE)
+            .arg("--");
+        for arg in &spec.args {
+            cmd.arg(arg);
+        }
+        cmd
+    };
+
+    command
+        .current_dir(&repo_root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    for (key, value) in spec.env_vars.iter() {
+        command.env(key, value);
+    }
+
+    let output = command
+        .output()
+        .await
+        .map_err(|err| format!("failed to execute desktop action {:?}: {err}", request.action))?;
+
+    let finished = unix_ms_now();
+    let duration_ms = finished.saturating_sub(started);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let status = if output.status.success() {
+        ExecutionStatus::Succeeded
+    } else {
+        ExecutionStatus::Failed
+    };
+
+    Ok(CommandExecutionResult {
+        action: request.action,
+        environment: request.environment,
+        status,
+        risk_level: risk_level_for(request.action),
+        command: spec.rendered_command,
+        args: spec.args.clone(),
+        working_directory: repo_root.display().to_string(),
+        started_at_unix_ms: started,
+        finished_at_unix_ms: finished,
+        duration_ms,
+        exit_code: output.status.code(),
+        stdout,
+        stderr,
+        artifacts: resolve_artifacts(&repo_root, &spec.artifact_hints),
+        next_steps: next_steps_for(request.action, request.environment, status),
+    })
+}
+
+fn validate_action_request(request: &CommandExecutionRequest) -> AppResult<()> {
+    let risk = risk_level_for(request.action);
+
+    if risk == RiskLevel::High {
+        let provided = request.confirmation_phrase.clone().unwrap_or_default();
+        if provided.trim() != "AOXC_DESKTOP_CONFIRM" {
+            return Err(
+                "high-risk desktop action rejected: confirmation phrase AOXC_DESKTOP_CONFIRM is required"
+                    .to_string(),
+            );
+        }
+    }
+
+    if let Some(options) = &request.options {
+        if let Some(rounds) = options.rounds {
+            if rounds == 0 || rounds > 10_000 {
+                return Err("invalid rounds value: expected 1..=10000".to_string());
+            }
+        }
+
+        if let Some(sleep_ms) = options.sleep_ms {
+            if sleep_ms == 0 || sleep_ms > 60_000 {
+                return Err("invalid sleepMs value: expected 1..=60000".to_string());
+            }
+        }
+
+        if let Some(profile) = &options.profile {
+            if !is_safe_token(profile) {
+                return Err("invalid profile value".to_string());
+            }
+        }
+
+        if let Some(format) = &options.format {
+            if !matches!(format.as_str(), "json" | "text") {
+                return Err("invalid format value: expected json or text".to_string());
+            }
+        }
+
+        if let Some(scenario) = &options.scenario {
+            if !is_safe_token(scenario) {
+                return Err("invalid scenario value".to_string());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ActionSpec {
+    program: String,
+    args: Vec<String>,
+    rendered_command: String,
+    script_path: Option<PathBuf>,
+    env_vars: Vec<(String, String)>,
+    artifact_hints: Vec<(String, String)>,
+}
+
+fn build_action_spec(
+    repo_root: &Path,
+    request: &CommandExecutionRequest,
+) -> AppResult<ActionSpec> {
+    let env_surface = environment_surface_for(repo_root, request.environment);
+    let options = request.options.clone().unwrap_or_default();
+
+    let format = options.format.unwrap_or_else(|| "json".to_string());
+    let profile = options.profile.unwrap_or_else(|| env_surface.profile.clone());
+    let home = options.home.unwrap_or_else(|| env_surface.home_path.clone());
+
+    let mut env_vars = vec![("AOXC_HOME".to_string(), home.clone())];
+
+    let spec = match request.action {
+        DesktopAction::MainnetReadiness => {
+            let mut args = vec!["mainnet-readiness".to_string()];
+            if options.enforce.unwrap_or(true) {
+                args.push("--enforce".to_string());
+            }
+            args.push("--format".to_string());
+            args.push(format.clone());
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Progress report".to_string(),
+                    AOXC_PROGRESS_REPORT.to_string(),
+                )],
+            }
+        }
+        DesktopAction::FullSurfaceReadiness => {
+            let mut args = vec!["full-surface-readiness".to_string()];
+            if options.enforce.unwrap_or(true) {
+                args.push("--enforce".to_string());
+            }
+            args.push("--format".to_string());
+            args.push(format.clone());
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![
+                    ("Progress report".to_string(), AOXC_PROGRESS_REPORT.to_string()),
+                    (
+                        "Release evidence bundle".to_string(),
+                        "artifacts/release-evidence".to_string(),
+                    ),
+                ],
+            }
+        }
+        DesktopAction::RuntimeStatus => {
+            let args = vec![
+                "runtime-status".to_string(),
+                "--format".to_string(),
+                format.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Network closure runtime status".to_string(),
+                    "artifacts/network-production-closure/runtime-status.json".to_string(),
+                )],
+            }
+        }
+        DesktopAction::ProductionAudit => {
+            let args = vec![
+                "production-audit".to_string(),
+                "--format".to_string(),
+                format.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![
+                    (
+                        "Release evidence bundle".to_string(),
+                        "artifacts/release-evidence".to_string(),
+                    ),
+                    (
+                        "Network closure production audit".to_string(),
+                        "artifacts/network-production-closure/production-audit.json"
+                            .to_string(),
+                    ),
+                ],
+            }
+        }
+        DesktopAction::DiagnosticsBundle => {
+            let mut args = vec!["diagnostics-bundle".to_string()];
+            if options.redact.unwrap_or(true) {
+                args.push("--redact".to_string());
+            }
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Diagnostics bundle".to_string(),
+                    "artifacts".to_string(),
+                )],
+            }
+        }
+        DesktopAction::ConfigValidate => {
+            let args = vec![
+                "config-validate".to_string(),
+                "--profile".to_string(),
+                profile.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Configuration profile".to_string(),
+                    env_surface.config_path.clone(),
+                )],
+            }
+        }
+        DesktopAction::ConfigPrint => {
+            let args = vec![
+                "config-print".to_string(),
+                "--profile".to_string(),
+                profile.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Configuration profile".to_string(),
+                    env_surface.config_path.clone(),
+                )],
+            }
+        }
+        DesktopAction::NodeBootstrap => {
+            let args = vec!["node-bootstrap".to_string(), "--home".to_string(), home.clone()];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![
+                    ("Node home".to_string(), home.clone()),
+                    (
+                        "Progress report".to_string(),
+                        AOXC_PROGRESS_REPORT.to_string(),
+                    ),
+                ],
+            }
+        }
+        DesktopAction::NodeHealth => {
+            let args = vec![
+                "node-health".to_string(),
+                "--home".to_string(),
+                home.clone(),
+                "--format".to_string(),
+                format.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![("Node home".to_string(), home.clone())],
+            }
+        }
+        DesktopAction::NodeRun => {
+            let rounds = options.rounds.unwrap_or(12);
+            let sleep_ms = options.sleep_ms.unwrap_or(200);
+
+            let args = vec![
+                "node-run".to_string(),
+                "--home".to_string(),
+                home.clone(),
+                "--rounds".to_string(),
+                rounds.to_string(),
+                "--sleep-ms".to_string(),
+                sleep_ms.to_string(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![("Node home".to_string(), home.clone())],
+            }
+        }
+        DesktopAction::NetworkSmoke => {
+            let args = vec![
+                "network-smoke".to_string(),
+                "--format".to_string(),
+                format.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Network production closure".to_string(),
+                    "artifacts/network-production-closure".to_string(),
+                )],
+            }
+        }
+        DesktopAction::RealNetworkValidation => {
+            let args = vec![
+                "real-network".to_string(),
+                "--format".to_string(),
+                format.clone(),
+            ];
+
+            ActionSpec {
+                program: "cargo".to_string(),
+                rendered_command: render_cargo_command(&args),
+                args,
+                script_path: None,
+                env_vars,
+                artifact_hints: vec![(
+                    "Network production closure".to_string(),
+                    "artifacts/network-production-closure".to_string(),
+                )],
+            }
+        }
+        DesktopAction::LaunchDeterministicCluster => {
+            if request.environment == EnvironmentKind::Mainnet {
+                return Err(
+                    "launch-deterministic-cluster is not permitted for mainnet environment"
+                        .to_string(),
+                );
+            }
+
+            let script_rel = "configs/deterministic-testnet/launch-testnet.sh";
+            let script_path = repo_root.join(script_rel);
+
+            if !script_path.exists() {
+                return Err(format!("missing deterministic cluster launcher: {}", script_path.display()));
+            }
+
+            env_vars.push((
+                "AOXC_PROFILE".to_string(),
+                env_surface.profile.clone(),
+            ));
+
+            ActionSpec {
+                program: "script".to_string(),
+                rendered_command: script_rel.to_string(),
+                args: vec![script_rel.to_string()],
+                script_path: Some(script_path),
+                env_vars,
+                artifact_hints: vec![
+                    ("Deterministic launcher".to_string(), script_rel.to_string()),
+                    (
+                        "Deterministic nodes".to_string(),
+                        "configs/deterministic-testnet/nodes".to_string(),
+                    ),
+                    (
+                        "Deterministic homes".to_string(),
+                        "configs/deterministic-testnet/homes".to_string(),
+                    ),
+                ],
+            }
+        }
+    };
+
+    Ok(spec)
+}
+
+fn render_cargo_command(args: &[String]) -> String {
+    let mut out = vec![
+        "cargo".to_string(),
+        "run".to_string(),
+        "-q".to_string(),
+        "-p".to_string(),
+        AOXC_BIN_PACKAGE.to_string(),
+        "--".to_string(),
+    ];
+    out.extend(args.iter().cloned());
+    out.join(" ")
+}
+
+fn resolve_artifacts(
+    repo_root: &Path,
+    hints: &[(String, String)],
+) -> Vec<ExecutionArtifact> {
+    hints.iter()
+        .map(|(label, rel)| {
+            let full = repo_root.join(rel);
+            ExecutionArtifact {
+                label: label.clone(),
+                path: rel.clone(),
+                exists: full.exists(),
+            }
+        })
+        .collect()
+}
+
+fn next_steps_for(
+    action: DesktopAction,
+    environment: EnvironmentKind,
+    status: ExecutionStatus,
+) -> Vec<String> {
+    if status == ExecutionStatus::Failed {
+        return vec![
+            "Inspect stderr and exit code in the execution panel.".to_string(),
+            "Verify AOXC_HOME, config profile, and environment-specific artifacts.".to_string(),
+            "Run production-audit or diagnostics-bundle before retrying.".to_string(),
+        ];
+    }
+
+    match action {
+        DesktopAction::MainnetReadiness => vec![
+            "Review remaining blockers in AOXC_PROGRESS_REPORT.md.".to_string(),
+            "Run full-surface-readiness for a broader closure decision.".to_string(),
+            "Export release evidence before any promotion decision.".to_string(),
+        ],
+        DesktopAction::FullSurfaceReadiness => vec![
+            "Review release evidence and closure artifacts.".to_string(),
+            "Verify signature/provenance posture before promotion.".to_string(),
+            format!("Confirm {:?} environment policy gates are fully closed.", environment),
+        ],
+        DesktopAction::RuntimeStatus => vec![
+            "Check node-health for the selected home.".to_string(),
+            "Compare runtime state against current readiness score.".to_string(),
+        ],
+        DesktopAction::ProductionAudit => vec![
+            "Store audit output under release evidence records.".to_string(),
+            "Re-run after any configuration or key lifecycle change.".to_string(),
+        ],
+        DesktopAction::DiagnosticsBundle => vec![
+            "Archive the bundle for incident and recovery review.".to_string(),
+            "Redact sensitive output before sharing externally.".to_string(),
+        ],
+        DesktopAction::ConfigValidate => vec![
+            "If validation passed, print the resolved profile for operator review.".to_string(),
+            "Proceed to node-bootstrap after configuration closure.".to_string(),
+        ],
+        DesktopAction::ConfigPrint => vec![
+            "Review chain ID, RPC target, and security mode.".to_string(),
+            "Run config-validate before bootstrapping the node.".to_string(),
+        ],
+        DesktopAction::NodeBootstrap => vec![
+            "Run node-health after bootstrapping.".to_string(),
+            "Run node-run for local validation or controlled smoke testing.".to_string(),
+        ],
+        DesktopAction::NodeHealth => vec![
+            "If health is degraded, inspect logs and diagnostics.".to_string(),
+            "Compare health output with runtime-status and network-smoke.".to_string(),
+        ],
+        DesktopAction::NodeRun => vec![
+            "Check node-health and runtime-status immediately after the run.".to_string(),
+            "Capture artifacts if this run is part of a readiness closure.".to_string(),
+        ],
+        DesktopAction::NetworkSmoke => vec![
+            "Escalate to real-network validation after smoke closure.".to_string(),
+            "Attach any generated artifacts to the closure report.".to_string(),
+        ],
+        DesktopAction::RealNetworkValidation => vec![
+            "Store results under network-production-closure artifacts.".to_string(),
+            "Review closure evidence before testnet or mainnet promotion.".to_string(),
+        ],
+        DesktopAction::LaunchDeterministicCluster => vec![
+            "Verify node cards and telemetry surfaces in AOXHub.".to_string(),
+            "Run network-smoke and production-audit from the desktop control plane.".to_string(),
+        ],
+    }
+}
+
+fn risk_level_for(action: DesktopAction) -> RiskLevel {
+    match action {
+        DesktopAction::MainnetReadiness
+        | DesktopAction::FullSurfaceReadiness
+        | DesktopAction::RuntimeStatus
+        | DesktopAction::ProductionAudit
+        | DesktopAction::DiagnosticsBundle
+        | DesktopAction::ConfigValidate
+        | DesktopAction::ConfigPrint
+        | DesktopAction::NodeHealth
+        | DesktopAction::NetworkSmoke => RiskLevel::Low,
+
+        DesktopAction::NodeBootstrap
+        | DesktopAction::NodeRun
+        | DesktopAction::RealNetworkValidation
+        | DesktopAction::LaunchDeterministicCluster => RiskLevel::Medium,
+    }
 }
 
 fn repo_root() -> AppResult<PathBuf> {
@@ -256,8 +926,7 @@ fn parse_percent_from_line(line: &str) -> Option<u8> {
             let remainder = &line[idx..];
 
             if remainder.trim_start().starts_with('%') {
-                let value = number.parse::<u8>().ok()?;
-                return Some(value);
+                return number.parse::<u8>().ok();
             }
         } else {
             idx += 1;
@@ -270,10 +939,9 @@ fn parse_percent_from_line(line: &str) -> Option<u8> {
 fn capture_blockers(report: &str) -> Vec<LaunchBlocker> {
     collect_section_items(report, "## Remaining blockers")
         .into_iter()
-        .filter_map(|line: &str| {
+        .filter_map(|line| {
             let rest = line.strip_prefix("- ")?;
             let (key, detail) = rest.split_once(':')?;
-
             let normalized_key = key.trim();
             let normalized_detail = detail.trim();
 
@@ -299,7 +967,7 @@ fn capture_area_progress(report: &str) -> Vec<AreaProgress> {
 
 fn collect_section_items<'a>(report: &'a str, header: &str) -> Vec<&'a str> {
     let mut in_section = false;
-    let mut out: Vec<&'a str> = Vec::new();
+    let mut out = Vec::new();
 
     for line in report.lines() {
         let trimmed = line.trim();
@@ -326,11 +994,7 @@ fn parse_area_progress(line: &str) -> Option<AreaProgress> {
     let (name, tail) = rest.split_once("**:")?;
 
     let percent = parse_percent_from_line(tail)?;
-    let status = if tail.contains("— ready") {
-        "ready"
-    } else {
-        "in-progress"
-    };
+    let status = if tail.contains("— ready") { "ready" } else { "in-progress" };
 
     let detail = tail
         .split('—')
@@ -351,17 +1015,17 @@ fn parse_area_progress(line: &str) -> Option<AreaProgress> {
 
 fn discover_node_controls(repo_root: &Path) -> AppResult<Vec<NodeControl>> {
     let nodes_dir = repo_root.join("configs/deterministic-testnet/nodes");
+
     let mut paths = fs::read_dir(&nodes_dir)
         .map_err(|err| format!("failed to read {}: {err}", nodes_dir.display()))?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
+        .filter(|path| path.extension() == Some(OsStr::new("toml")))
         .collect::<Vec<_>>();
 
     paths.sort();
 
     paths.into_iter()
-        .take(3)
         .map(|path| {
             let content = fs::read_to_string(&path)
                 .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
@@ -403,7 +1067,7 @@ fn discover_node_controls(repo_root: &Path) -> AppResult<Vec<NodeControl>> {
 
 fn control_files(repo_root: &Path) -> Vec<FileStatus> {
     [
-        ("Progress report", "AOXC_PROGRESS_REPORT.md"),
+        ("Progress report", AOXC_PROGRESS_REPORT),
         ("Mainnet profile", "configs/mainnet.toml"),
         ("Testnet profile", "configs/testnet.toml"),
         ("AOXHub mainnet profile", "configs/aoxhub-mainnet.toml"),
@@ -475,7 +1139,7 @@ fn discover_report_assets(repo_root: &Path) -> Vec<ReportAsset> {
         ),
         (
             "Progress report",
-            "AOXC_PROGRESS_REPORT.md",
+            AOXC_PROGRESS_REPORT,
             "Current readiness summary consumed by AOXHub desktop.",
         ),
     ];
@@ -530,25 +1194,28 @@ fn wallet_surfaces() -> Vec<WalletSurface> {
 fn command_presets() -> Vec<CommandPreset> {
     vec![
         CommandPreset {
-            title: "Bring up deterministic 3-node cluster".to_string(),
+            title: "Bring up deterministic local cluster".to_string(),
             command: "configs/deterministic-testnet/launch-testnet.sh".to_string(),
-            intent:
-                "Bootstrap three local nodes and verify cluster orchestration from desktop."
-                    .to_string(),
+            intent: "Bootstrap the deterministic local cluster and verify cluster orchestration from desktop.".to_string(),
+            risk_level: RiskLevel::Medium,
+        },
+        CommandPreset {
+            title: "Run mainnet readiness".to_string(),
+            command: "cargo run -q -p aoxcmd -- mainnet-readiness --enforce --format json".to_string(),
+            intent: "Refresh the mainnet readiness surface before any promotion decision.".to_string(),
+            risk_level: RiskLevel::Low,
+        },
+        CommandPreset {
+            title: "Run runtime status".to_string(),
+            command: "cargo run -q -p aoxcmd -- runtime-status --format json".to_string(),
+            intent: "Refresh runtime health and operational posture for the selected environment.".to_string(),
+            risk_level: RiskLevel::Low,
         },
         CommandPreset {
             title: "Generate production audit".to_string(),
             command: "cargo run -q -p aoxcmd -- production-audit --format json".to_string(),
-            intent: "Refresh the operator audit surface before release or wallet approval."
-                .to_string(),
-        },
-        CommandPreset {
-            title: "Produce closure bundle".to_string(),
-            command: "scripts/validation/network_production_closure.sh --scenario soak"
-                .to_string(),
-            intent:
-                "Collect telemetry, runtime, and rollout evidence for the admin cockpit reporting tab."
-                    .to_string(),
+            intent: "Refresh the operator audit surface before release or wallet approval.".to_string(),
+            risk_level: RiskLevel::Low,
         },
     ]
 }
@@ -612,6 +1279,88 @@ fn discover_ai_surfaces(repo_root: &Path) -> AppResult<Vec<AiSurface>> {
         .collect())
 }
 
+fn discover_environments(repo_root: &Path) -> Vec<EnvironmentSurface> {
+    vec![
+        environment_surface_for(repo_root, EnvironmentKind::Localnet),
+        environment_surface_for(repo_root, EnvironmentKind::Testnet),
+        environment_surface_for(repo_root, EnvironmentKind::Mainnet),
+    ]
+}
+
+fn environment_surface_for(repo_root: &Path, kind: EnvironmentKind) -> EnvironmentSurface {
+    let (label, profile, config_path, home_path, genesis_path) = match kind {
+        EnvironmentKind::Localnet => (
+            "Localnet",
+            "localnet",
+            "configs/deterministic-testnet/nodes/atlas.toml",
+            "configs/deterministic-testnet/homes/atlas",
+            "configs/deterministic-testnet/genesis.json",
+        ),
+        EnvironmentKind::Testnet => (
+            "Testnet",
+            "testnet",
+            "configs/testnet.toml",
+            ".aoxc-testnet",
+            "configs/genesis.json",
+        ),
+        EnvironmentKind::Mainnet => (
+            "Mainnet",
+            "mainnet",
+            "configs/mainnet.toml",
+            ".aoxc-mainnet",
+            "configs/genesis.json",
+        ),
+    };
+
+    let config_content = fs::read_to_string(repo_root.join(config_path)).unwrap_or_default();
+    let chain_id = config_value(&config_content, "chain_id").unwrap_or_else(|| "unknown".into());
+    let rpc_addr = config_value(&config_content, "rpc_addr").unwrap_or_else(|| "n/a".into());
+    let security_mode =
+        config_value(&config_content, "security_mode").unwrap_or_else(|| "unknown".into());
+
+    let config_exists = repo_root.join(config_path).exists();
+    let home_exists = repo_root.join(home_path).exists();
+    let genesis_exists = repo_root.join(genesis_path).exists();
+
+    let readiness_status = if config_exists && genesis_exists {
+        if home_exists {
+            "in-progress"
+        } else {
+            "bootstrap"
+        }
+    } else {
+        "blocked"
+    };
+
+    let notes = match kind {
+        EnvironmentKind::Localnet => {
+            "Deterministic fixture environment for desktop bring-up, smoke validation, and cluster workflow rehearsal."
+        }
+        EnvironmentKind::Testnet => {
+            "Shared non-production environment for compatibility, network rehearsal, and pre-mainnet closure."
+        }
+        EnvironmentKind::Mainnet => {
+            "Production promotion environment. All readiness, audit, and evidence gates must be closed before operator approval."
+        }
+    };
+
+    EnvironmentSurface {
+        kind,
+        label: label.to_string(),
+        profile: profile.to_string(),
+        config_path: config_path.to_string(),
+        home_path: home_path.to_string(),
+        chain_id,
+        rpc_addr,
+        security_mode,
+        readiness_status: readiness_status.to_string(),
+        config_exists,
+        home_exists,
+        genesis_exists,
+        notes: notes.to_string(),
+    }
+}
+
 fn humanize_key(key: &str) -> String {
     key.split('-')
         .map(|part| {
@@ -660,12 +1409,16 @@ fn status_from_percent(percent: u8) -> &'static str {
 fn desktop_percent(overall_percent: u8, nodes: &[NodeControl], reports: &[ReportAsset]) -> u8 {
     let online_nodes = u8::try_from(nodes.iter().filter(|node| node.status == "online").count())
         .unwrap_or(0);
-    let ready_reports =
-        u8::try_from(reports.iter().filter(|report| report.status == "ready").count())
-            .unwrap_or(0);
+    let ready_reports = u8::try_from(
+        reports
+            .iter()
+            .filter(|report| report.status == "ready")
+            .count(),
+    )
+    .unwrap_or(0);
 
     overall_percent
-        .saturating_add(online_nodes.saturating_mul(5))
+        .saturating_add(online_nodes.saturating_mul(3))
         .saturating_add(ready_reports.saturating_mul(3))
         .min(100)
 }
@@ -748,6 +1501,7 @@ fn workspace_category(package_name: &str) -> &'static str {
         "aoxcrpc" | "aoxcnet" | "aoxconfig" => "Network & RPC",
         "aoxcsdk" | "aoxckit" | "aoxclibs" => "Developer surface",
         "aoxcmob" | "aoxchal" => "Client & access",
+        "tests" => "Test surface",
         _ => "Workspace",
     }
 }
@@ -809,8 +1563,7 @@ fn ai_summary(module: &str) -> String {
             "Model manifests define model identity, limits, and deployment metadata.".to_string()
         }
         "model" => {
-            "Typed request/response and assessment models standardize AI integration."
-                .to_string()
+            "Typed request/response and assessment models standardize AI integration.".to_string()
         }
         "policy" => {
             "Policy fusion decides whether an AI request is allowed or denied.".to_string()
@@ -859,23 +1612,49 @@ fn node_role(node_name: &str) -> &'static str {
         "atlas" => "validator leader",
         "boreal" => "validator follower",
         "cypher" => "observer / telemetry anchor",
+        "delta" => "cluster member",
+        "ember" => "cluster member",
         _ => "cluster member",
     }
+}
+
+fn unix_ms_now() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+fn is_safe_token(input: &str) -> bool {
+    !input.is_empty()
+        && input
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         capture_area_progress, capture_manifest_package_name, config_value, desktop_percent,
-        list_entry_count, parse_area_progress, parse_percent_from_line, workspace_members,
-        NodeControl, ReportAsset,
+        list_entry_count, parse_area_progress, parse_percent_from_line, risk_level_for,
+        workspace_members, CommandExecutionRequest, DesktopAction, EnvironmentKind, NodeControl,
+        ReportAsset, RiskLevel,
     };
 
     #[test]
     fn parses_markdown_percent_lines() {
-        assert_eq!(parse_percent_from_line("- Overall readiness: **60%** (73/121)"), Some(60));
-        assert_eq!(parse_percent_from_line("- **mainnet**: 60% (73/121) — in-progress"), Some(60));
-        assert_eq!(parse_percent_from_line("- **testnet**: 65% (73/111) — in-progress"), Some(65));
+        assert_eq!(
+            parse_percent_from_line("- Overall readiness: **60%** (73/121)"),
+            Some(60)
+        );
+        assert_eq!(
+            parse_percent_from_line("- **mainnet**: 60% (73/121) — in-progress"),
+            Some(60)
+        );
+        assert_eq!(
+            parse_percent_from_line("- **testnet**: 65% (73/111) — in-progress"),
+            Some(65)
+        );
     }
 
     #[test]
@@ -949,7 +1728,7 @@ peers = [
             },
         ];
 
-        assert_eq!(desktop_percent(60, &nodes, &reports), 68);
+        assert_eq!(desktop_percent(60, &nodes, &reports), 66);
     }
 
     #[test]
@@ -987,12 +1766,33 @@ version = "0.1.0"
             Some("aoxcai")
         );
     }
+
+    #[test]
+    fn action_risk_levels_are_stable() {
+        assert_eq!(risk_level_for(DesktopAction::MainnetReadiness), RiskLevel::Low);
+        assert_eq!(risk_level_for(DesktopAction::NodeRun), RiskLevel::Medium);
+    }
+
+    #[test]
+    fn request_type_round_trip_compiles() {
+        let req = CommandExecutionRequest {
+            action: DesktopAction::RuntimeStatus,
+            environment: EnvironmentKind::Localnet,
+            options: None,
+            confirmation_phrase: None,
+        };
+
+        assert!(matches!(req.environment, EnvironmentKind::Localnet));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![load_control_center_snapshot])
+        .invoke_handler(tauri::generate_handler![
+            load_control_center_snapshot,
+            run_desktop_action
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
