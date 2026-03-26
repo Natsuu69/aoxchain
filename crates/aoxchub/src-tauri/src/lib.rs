@@ -374,10 +374,12 @@ async fn run_desktop_action(request: CommandExecutionRequest) -> AppResult<Comma
         command.env(key, value);
     }
 
-    let output = command
-        .output()
-        .await
-        .map_err(|err| format!("failed to execute desktop action {:?}: {err}", request.action))?;
+    let output = command.output().await.map_err(|err| {
+        format!(
+            "failed to execute desktop action {:?}: {err}",
+            request.action
+        )
+    })?;
 
     let finished = unix_ms_now();
     let duration_ms = finished.saturating_sub(started);
@@ -466,16 +468,17 @@ struct ActionSpec {
     artifact_hints: Vec<(String, String)>,
 }
 
-fn build_action_spec(
-    repo_root: &Path,
-    request: &CommandExecutionRequest,
-) -> AppResult<ActionSpec> {
+fn build_action_spec(repo_root: &Path, request: &CommandExecutionRequest) -> AppResult<ActionSpec> {
     let env_surface = environment_surface_for(repo_root, request.environment);
     let options = request.options.clone().unwrap_or_default();
 
     let format = options.format.unwrap_or_else(|| "json".to_string());
-    let profile = options.profile.unwrap_or_else(|| env_surface.profile.clone());
-    let home = options.home.unwrap_or_else(|| env_surface.home_path.clone());
+    let profile = options
+        .profile
+        .unwrap_or_else(|| env_surface.profile.clone());
+    let home = options
+        .home
+        .unwrap_or_else(|| env_surface.home_path.clone());
 
     let mut env_vars = vec![("AOXC_HOME".to_string(), home.clone())];
 
@@ -515,7 +518,10 @@ fn build_action_spec(
                 script_path: None,
                 env_vars,
                 artifact_hints: vec![
-                    ("Progress report".to_string(), AOXC_PROGRESS_REPORT.to_string()),
+                    (
+                        "Progress report".to_string(),
+                        AOXC_PROGRESS_REPORT.to_string(),
+                    ),
                     (
                         "Release evidence bundle".to_string(),
                         "artifacts/release-evidence".to_string(),
@@ -562,8 +568,7 @@ fn build_action_spec(
                     ),
                     (
                         "Network closure production audit".to_string(),
-                        "artifacts/network-production-closure/production-audit.json"
-                            .to_string(),
+                        "artifacts/network-production-closure/production-audit.json".to_string(),
                     ),
                 ],
             }
@@ -580,10 +585,7 @@ fn build_action_spec(
                 args,
                 script_path: None,
                 env_vars,
-                artifact_hints: vec![(
-                    "Diagnostics bundle".to_string(),
-                    "artifacts".to_string(),
-                )],
+                artifact_hints: vec![("Diagnostics bundle".to_string(), "artifacts".to_string())],
             }
         }
         DesktopAction::ConfigValidate => {
@@ -625,7 +627,11 @@ fn build_action_spec(
             }
         }
         DesktopAction::NodeBootstrap => {
-            let args = vec!["node-bootstrap".to_string(), "--home".to_string(), home.clone()];
+            let args = vec![
+                "node-bootstrap".to_string(),
+                "--home".to_string(),
+                home.clone(),
+            ];
 
             ActionSpec {
                 program: "cargo".to_string(),
@@ -733,13 +739,13 @@ fn build_action_spec(
             let script_path = repo_root.join(script_rel);
 
             if !script_path.exists() {
-                return Err(format!("missing deterministic cluster launcher: {}", script_path.display()));
+                return Err(format!(
+                    "missing deterministic cluster launcher: {}",
+                    script_path.display()
+                ));
             }
 
-            env_vars.push((
-                "AOXC_PROFILE".to_string(),
-                env_surface.profile.clone(),
-            ));
+            env_vars.push(("AOXC_PROFILE".to_string(), env_surface.profile.clone()));
 
             ActionSpec {
                 program: "script".to_string(),
@@ -778,11 +784,9 @@ fn render_cargo_command(args: &[String]) -> String {
     out.join(" ")
 }
 
-fn resolve_artifacts(
-    repo_root: &Path,
-    hints: &[(String, String)],
-) -> Vec<ExecutionArtifact> {
-    hints.iter()
+fn resolve_artifacts(repo_root: &Path, hints: &[(String, String)]) -> Vec<ExecutionArtifact> {
+    hints
+        .iter()
         .map(|(label, rel)| {
             let full = repo_root.join(rel);
             ExecutionArtifact {
@@ -816,7 +820,10 @@ fn next_steps_for(
         DesktopAction::FullSurfaceReadiness => vec![
             "Review release evidence and closure artifacts.".to_string(),
             "Verify signature/provenance posture before promotion.".to_string(),
-            format!("Confirm {:?} environment policy gates are fully closed.", environment),
+            format!(
+                "Confirm {:?} environment policy gates are fully closed.",
+                environment
+            ),
         ],
         DesktopAction::RuntimeStatus => vec![
             "Check node-health for the selected home.".to_string(),
@@ -994,7 +1001,11 @@ fn parse_area_progress(line: &str) -> Option<AreaProgress> {
     let (name, tail) = rest.split_once("**:")?;
 
     let percent = parse_percent_from_line(tail)?;
-    let status = if tail.contains("— ready") { "ready" } else { "in-progress" };
+    let status = if tail.contains("— ready") {
+        "ready"
+    } else {
+        "in-progress"
+    };
 
     let detail = tail
         .split('—')
@@ -1118,9 +1129,8 @@ fn discover_telemetry_surfaces(repo_root: &Path) -> Vec<TelemetrySurface> {
                 "blocked".to_string()
             },
             target: "artifacts/network-production-closure/telemetry-snapshot.json".to_string(),
-            detail:
-                "Prometheus, alerting, and closure telemetry evidence should be exported here."
-                    .to_string(),
+            detail: "Prometheus, alerting, and closure telemetry evidence should be exported here."
+                .to_string(),
         },
     ]
 }
@@ -1407,8 +1417,8 @@ fn status_from_percent(percent: u8) -> &'static str {
 }
 
 fn desktop_percent(overall_percent: u8, nodes: &[NodeControl], reports: &[ReportAsset]) -> u8 {
-    let online_nodes = u8::try_from(nodes.iter().filter(|node| node.status == "online").count())
-        .unwrap_or(0);
+    let online_nodes =
+        u8::try_from(nodes.iter().filter(|node| node.status == "online").count()).unwrap_or(0);
     let ready_reports = u8::try_from(
         reports
             .iter()
@@ -1537,10 +1547,8 @@ fn ai_summary(module: &str) -> String {
             "Provider adapters bridge approved AI requests into external or heuristic backends."
                 .to_string()
         }
-        "audit" => {
-            "Every AI invocation should emit auditable records and explicit dispositions."
-                .to_string()
-        }
+        "audit" => "Every AI invocation should emit auditable records and explicit dispositions."
+            .to_string(),
         "backend" => {
             "Backend factory and execution surfaces select local or remote inference providers."
                 .to_string()
@@ -1565,17 +1573,11 @@ fn ai_summary(module: &str) -> String {
         "model" => {
             "Typed request/response and assessment models standardize AI integration.".to_string()
         }
-        "policy" => {
-            "Policy fusion decides whether an AI request is allowed or denied.".to_string()
-        }
-        "registry" => {
-            "Registry tracks available AI models and extensions exposed to the platform."
-                .to_string()
-        }
-        "traits" => {
-            "Shared traits define stable AI interfaces for context, policy, and backends."
-                .to_string()
-        }
+        "policy" => "Policy fusion decides whether an AI request is allowed or denied.".to_string(),
+        "registry" => "Registry tracks available AI models and extensions exposed to the platform."
+            .to_string(),
+        "traits" => "Shared traits define stable AI interfaces for context, policy, and backends."
+            .to_string(),
         _ => format!("{module} AI surface is exposed through the desktop control plane."),
     }
 }
@@ -1769,7 +1771,10 @@ version = "0.1.0"
 
     #[test]
     fn action_risk_levels_are_stable() {
-        assert_eq!(risk_level_for(DesktopAction::MainnetReadiness), RiskLevel::Low);
+        assert_eq!(
+            risk_level_for(DesktopAction::MainnetReadiness),
+            RiskLevel::Low
+        );
         assert_eq!(risk_level_for(DesktopAction::NodeRun), RiskLevel::Medium);
     }
 
