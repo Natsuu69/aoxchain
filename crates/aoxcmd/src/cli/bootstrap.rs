@@ -282,7 +282,6 @@ fn genesis_path() -> Result<PathBuf, AppError> {
     Ok(resolve_home()?.join("identity").join("genesis.json"))
 }
 
-
 pub fn genesis_ready() -> bool {
     match genesis_path() {
         Ok(path) => path.exists(),
@@ -512,7 +511,6 @@ fn bootstrap_root() -> PathBuf {
     env::temp_dir().join("aoxc-bootstrap")
 }
 
-
 pub fn cmd_production_bootstrap(args: &[String]) -> Result<(), AppError> {
     cmd_profile_bootstrap(args)
 }
@@ -673,7 +671,6 @@ fn build_profile_settings(
 
     Ok(settings)
 }
-
 
 fn load_genesis() -> Result<BootstrapGenesisDocument, AppError> {
     let raw = read_file(&genesis_path()?)?;
