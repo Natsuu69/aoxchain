@@ -4,6 +4,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Returns the canonical default AOXC operator home directory.
+///
+/// The default path is intentionally namespaced under:
+/// `$HOME/.aoxc/default`
+///
+/// This avoids mixing AOXC state with unrelated hidden folders and makes it
+/// operationally clearer that a single home directory should represent a
+/// single runtime environment. Operators are expected to override this path
+/// with `AOXC_HOME` or CLI `--home` for explicit per-network separation.
 pub fn default_home_dir() -> Result<PathBuf, AppError> {
     let home = env::var("HOME").map(PathBuf::from).map_err(|_| {
         AppError::new(
@@ -11,9 +20,15 @@ pub fn default_home_dir() -> Result<PathBuf, AppError> {
             "HOME environment variable is not set",
         )
     })?;
-    Ok(home.join(".aoxc-data"))
+
+    Ok(home.join(".aoxc").join("default"))
 }
 
+/// Resolves the effective AOXC operator home directory.
+///
+/// Resolution order:
+/// 1. `AOXC_HOME` environment variable when present and non-empty
+/// 2. canonical default operator home returned by `default_home_dir()`
 pub fn resolve_home() -> Result<PathBuf, AppError> {
     match env::var("AOXC_HOME") {
         Ok(value) if !value.trim().is_empty() => Ok(PathBuf::from(value)),
@@ -21,8 +36,12 @@ pub fn resolve_home() -> Result<PathBuf, AppError> {
     }
 }
 
+/// Ensures the canonical AOXC directory layout exists under the supplied home.
+///
+/// The layout intentionally separates configuration, key material, genesis,
+/// runtime state, telemetry, and operator reports into dedicated subtrees.
 pub fn ensure_layout(home: &Path) -> Result<(), AppError> {
-    for relative in [
+    let required_dirs = [
         "config",
         "identity",
         "keys",
@@ -31,21 +50,26 @@ pub fn ensure_layout(home: &Path) -> Result<(), AppError> {
         "telemetry",
         "reports",
         "support",
-    ] {
-        fs::create_dir_all(home.join(relative)).map_err(|e| {
+    ];
+
+    for relative in required_dirs {
+        let dir = home.join(relative);
+        fs::create_dir_all(&dir).map_err(|e| {
             AppError::with_source(
                 ErrorCode::FilesystemIoFailed,
-                format!(
-                    "Failed to create directory {}",
-                    home.join(relative).display()
-                ),
+                format!("Failed to create directory {}", dir.display()),
                 e,
             )
         })?;
     }
+
     Ok(())
 }
 
+/// Writes a sensitive AOXC file and hardens its permissions when supported.
+///
+/// Parent directories are created automatically before writing.
+/// On Unix platforms, file permissions are reduced to `0600`.
 pub fn write_file(path: &Path, content: &str) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
@@ -56,6 +80,7 @@ pub fn write_file(path: &Path, content: &str) -> Result<(), AppError> {
             )
         })?;
     }
+
     fs::write(path, content).map_err(|e| {
         AppError::with_source(
             ErrorCode::FilesystemIoFailed,
@@ -63,10 +88,12 @@ pub fn write_file(path: &Path, content: &str) -> Result<(), AppError> {
             e,
         )
     })?;
+
     harden_file_permissions(path)?;
     Ok(())
 }
 
+/// Reads a UTF-8 AOXC file from disk.
 pub fn read_file(path: &Path) -> Result<String, AppError> {
     fs::read_to_string(path).map_err(|e| {
         AppError::with_source(
@@ -77,6 +104,10 @@ pub fn read_file(path: &Path) -> Result<String, AppError> {
     })
 }
 
+/// Returns whether the file permissions are hardened for sensitive operator data.
+///
+/// On Unix, the check requires that no group/world permission bits are present.
+/// On non-Unix platforms, this function currently returns `true`.
 pub fn file_permissions_are_hardened(path: &Path) -> Result<bool, AppError> {
     let metadata = fs::metadata(path).map_err(|e| {
         AppError::with_source(
@@ -101,10 +132,15 @@ pub fn file_permissions_are_hardened(path: &Path) -> Result<bool, AppError> {
     }
 }
 
+/// Hardens file permissions for sensitive AOXC artifacts.
+///
+/// On Unix, written files are reduced to mode `0600`.
+/// On non-Unix targets, the function is a no-op.
 fn harden_file_permissions(path: &Path) -> Result<(), AppError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+
         fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|e| {
             AppError::with_source(
                 ErrorCode::FilesystemIoFailed,
@@ -119,8 +155,59 @@ fn harden_file_permissions(path: &Path) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_permissions_are_hardened, write_file};
+    use super::{
+        default_home_dir, ensure_layout, file_permissions_are_hardened, resolve_home, write_file,
+    };
     use crate::test_support::TestHome;
+    use std::{env, path::PathBuf};
+
+    #[test]
+    fn default_home_dir_is_namespaced_under_dot_aoxc() {
+        let home = env::var("HOME").expect("HOME must be set for tests");
+        let expected = PathBuf::from(home).join(".aoxc").join("default");
+
+        assert_eq!(
+            default_home_dir().expect("default home should resolve"),
+            expected
+        );
+    }
+
+    #[test]
+    fn resolve_home_prefers_aoxc_home_override() {
+        let test_home = TestHome::new("resolve-home-override");
+        let override_home = test_home.path().join("custom-home");
+
+        env::set_var("AOXC_HOME", &override_home);
+        let resolved = resolve_home().expect("AOXC_HOME override should resolve");
+        env::remove_var("AOXC_HOME");
+
+        assert_eq!(resolved, override_home);
+    }
+
+    #[test]
+    fn ensure_layout_creates_required_operator_directories() {
+        let home = TestHome::new("ensure-layout");
+        let root = home.path().join("operator-home");
+
+        ensure_layout(&root).expect("layout creation should succeed");
+
+        for relative in [
+            "config",
+            "identity",
+            "keys",
+            "ledger",
+            "runtime",
+            "telemetry",
+            "reports",
+            "support",
+        ] {
+            assert!(
+                root.join(relative).is_dir(),
+                "expected directory {} to exist",
+                root.join(relative).display()
+            );
+        }
+    }
 
     #[test]
     fn write_file_hardens_sensitive_file_permissions() {
