@@ -219,11 +219,12 @@ dependencies = [
 
 [[package]]
 name = "aoxchub"
-version = "0.1.1"
+version = "0.1.1-akdeniz"
 dependencies = [
  "aoxcai",
  "aoxclibs",
  "aoxcmd",
+ "aoxconfig",
  "aoxcore",
  "aoxcrpc",
  "aoxcvm",
