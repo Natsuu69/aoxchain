@@ -658,18 +658,18 @@ impl fmt::Display for GenesisConfigError {
             Self::InvalidProtocolVersion => f.write_str(
                 "genesis configuration validation failed: protocol_version must not be empty",
             ),
-            Self::EmptyBootNodes => f.write_str(
-                "genesis configuration validation failed: boot_nodes must not be empty",
-            ),
+            Self::EmptyBootNodes => {
+                f.write_str("genesis configuration validation failed: boot_nodes must not be empty")
+            }
             Self::InvalidBootNode { node_id } => {
                 write!(
                     f,
                     "genesis configuration validation failed: boot node `{node_id}` is invalid"
                 )
             }
-            Self::InvalidQuantumPolicy => f.write_str(
-                "genesis configuration validation failed: quantum policy is invalid",
-            ),
+            Self::InvalidQuantumPolicy => {
+                f.write_str("genesis configuration validation failed: quantum policy is invalid")
+            }
         }
     }
 }
