@@ -18,6 +18,7 @@ pub fn Home() -> Element {
                 MetricCard { title: "Network Health", value: format!("{:.2}%", chain.read().network_health), hint: "Consensus signal" }
                 MetricCard { title: "Total Staked", value: format!("{} AOXC", chain.read().total_staked), hint: "Secured in vault" }
             }
+            p { class: "text-sm text-slate-300", "Veriler doğrudan RPC/health/metrics endpointlerinden okunur." }
 
             GlassSurface { class: Some("p-5".to_string()), intensity: Some("low"),
                 h3 { class: "mb-4 text-lg font-semibold text-white", "Execution Lanes" }
@@ -25,6 +26,9 @@ pub fn Home() -> Element {
                     for lane in chain.read().lanes.clone() {
                         LaneRow { lane: lane }
                     }
+                },
+                None => rsx! {
+                    GlassSurface { class: Some("p-5".to_string()), "Yükleniyor..." }
                 }
             }
         }
@@ -108,6 +112,41 @@ fn LaneRow(lane: crate::types::LaneStatus) -> Element {
             div { class: "mt-3 h-2 rounded-full bg-slate-800",
                 div { class: "h-full rounded-full bg-blue-500", style: "width: {width}" }
             }
+            p { class: "text-slate-300", "Prometheus metrics üzerinden node davranışı izlenir." }
+
+            {match snapshot() {
+                Some(Ok(metrics)) => rsx! {
+                    GlassSurface { class: Some("p-5".to_string()),
+                        ul { class: "space-y-2 text-sm text-slate-200",
+                            li { "requests_total: {metrics.requests_total}" }
+                            li { "rejected_total: {metrics.rejected_total}" }
+                            li { "rate_limited_total: {metrics.rate_limited_total}" }
+                            li { "health_readiness_score: {metrics.readiness_score}" }
+                        }
+                    }
+                },
+                Some(Err(err)) => rsx! {
+                    GlassSurface { class: Some("p-5 border-red-500/40".to_string()),
+                        p { class: "text-red-200 text-sm", "Metrics okunamadı: {err}" }
+                    }
+                },
+                None => rsx! { GlassSurface { class: Some("p-5".to_string()), "Yükleniyor..." } },
+            }}
         }
     }
+}
+
+#[component]
+fn MetricCard(title: &'static str, value: String, hint: String) -> Element {
+    rsx! {
+        GlassSurface { class: Some("p-4".to_string()), intensity: Some("low"),
+            p { class: "text-xs uppercase tracking-wide text-slate-400", "{title}" }
+            p { class: "mt-2 text-xl font-semibold text-white break-all", "{value}" }
+            p { class: "mt-1 text-xs text-slate-400", "{hint}" }
+        }
+    }
+}
+
+fn _pretty_json(value: &Value) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
