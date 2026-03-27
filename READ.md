@@ -82,7 +82,7 @@ Her ortam için profile/genesis/validator/release-policy seti sürümlü tutulur
 
 **İlke:** Ortamlar arası farklar açık olmalı; gizli varsayım bırakılmamalı.
 
----
+Desktop etkileşim hedefleri:
 
 ## 6) Güvenlik, anahtar ve denetlenebilirlik
 
