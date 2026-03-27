@@ -201,6 +201,24 @@ fn Home() -> Element {
         }
 
         section { class: "grid-section",
+            h2 { "Operasyon Sağlık Özeti" }
+            div { class: "card-grid",
+                article { class: "card",
+                    h3 { "Toplam İşlem" }
+                    p { "{op_history().len()} adet UI operasyonu kayıtlı." }
+                }
+                article { class: "card",
+                    h3 { "Başarılı" }
+                    p { "{success_count} işlem başarılı tamamlandı." }
+                }
+                article { class: "card",
+                    h3 { "Hata" }
+                    p { "{error_count} işlem hata üretti; tekrar deneme önerilir." }
+                }
+            }
+        }
+
+        section { class: "grid-section",
             h2 { "Yüzey Uyum Durumu" }
             div { class: "card-grid",
                 for platform in PLATFORMS {
