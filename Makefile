@@ -2,7 +2,7 @@ AOXC_HOME ?= $(HOME)/.aoxc
 AOXC_BIN_DIR ?= $(AOXC_HOME)/bin
 AOXC_BIN_PATH ?= $(AOXC_BIN_DIR)/aoxc
 
-.PHONY: help build build-release package-bin test check fmt clippy audit quality quality-quick quality-release ci run-local supervise-local audit-install produce-loop real-chain-prep real-chain-run real-chain-run-once real-chain-health real-chain-tail version manifest policy dev-bootstrap
+.PHONY: help build build-release package-bin test check fmt clippy audit quality quality-quick quality-release ci run-local supervise-local audit-install produce-loop real-chain-prep real-chain-run real-chain-run-once real-chain-health real-chain-tail version manifest policy dev-bootstrap net-mainnet-start net-mainnet-once net-mainnet-status net-mainnet-stop net-testnet-start net-testnet-once net-testnet-status net-testnet-stop net-devnet-start net-devnet-once net-devnet-status net-devnet-stop ops-help ops-doctor ops-start-mainnet ops-start-testnet ops-start-devnet ops-stop-mainnet ops-stop-testnet ops-stop-devnet ops-status-mainnet ops-status-testnet ops-status-devnet ops-restart-mainnet ops-restart-testnet ops-restart-devnet ops-logs-mainnet ops-logs-testnet ops-logs-devnet
 help:
 	@printf "\nAOXChain developer targets\n\n"
 	@printf "  make fmt              - format the workspace\n"
@@ -28,6 +28,34 @@ help:
 	@printf "  make real-chain-run      - run the local real-chain daemon loop\n"
 	@printf "  make real-chain-health   - probe local network health\n"
 	@printf "  make real-chain-tail     - tail runtime and health logs\n\n"
+	@printf "Environment daemons (production-oriented)\n"
+	@printf "  make net-mainnet-start   - bootstrap/start mainnet daemon\n"
+	@printf "  make net-mainnet-once    - run one mainnet produce+health cycle\n"
+	@printf "  make net-mainnet-status  - show mainnet daemon status\n"
+	@printf "  make net-mainnet-stop    - stop mainnet daemon\n"
+	@printf "  make net-testnet-start   - bootstrap/start testnet daemon\n"
+	@printf "  make net-testnet-once    - run one testnet produce+health cycle\n"
+	@printf "  make net-testnet-status  - show testnet daemon status\n"
+	@printf "  make net-testnet-stop    - stop testnet daemon\n"
+	@printf "  make net-devnet-start    - bootstrap/start devnet daemon\n"
+	@printf "  make net-devnet-once     - run one devnet produce+health cycle\n"
+	@printf "  make net-devnet-status   - show devnet daemon status\n"
+	@printf "  make net-devnet-stop     - stop devnet daemon\n\n"
+	@printf "Easy operations CLI (7 to 77)\n"
+	@printf "  make ops-help            - show beginner-friendly commands\n"
+	@printf "  make ops-doctor          - run environment readiness checks\n"
+	@printf "  make ops-start-mainnet   - start mainnet quickly\n"
+	@printf "  make ops-start-testnet   - start testnet quickly\n"
+	@printf "  make ops-start-devnet    - start devnet quickly\n"
+	@printf "  make ops-status-mainnet  - mainnet status\n"
+	@printf "  make ops-status-testnet  - testnet status\n"
+	@printf "  make ops-status-devnet   - devnet status\n"
+	@printf "  make ops-stop-mainnet    - stop mainnet\n"
+	@printf "  make ops-stop-testnet    - stop testnet\n"
+	@printf "  make ops-stop-devnet     - stop devnet\n"
+	@printf "  make ops-logs-mainnet    - tail mainnet logs\n"
+	@printf "  make ops-logs-testnet    - tail testnet logs\n"
+	@printf "  make ops-logs-devnet     - tail devnet logs\n\n"
 
 alpha:
 	@printf "AOXC Alpha: Genesis V1\n"
@@ -120,3 +148,90 @@ real-chain-health: package-bin
 
 real-chain-tail:
 	tail -n 120 -f logs/real-chain/runtime.log logs/real-chain/health.log
+
+net-mainnet-start: package-bin
+	./scripts/network_env_daemon.sh start mainnet
+
+net-mainnet-once: package-bin
+	./scripts/network_env_daemon.sh once mainnet
+
+net-mainnet-status:
+	./scripts/network_env_daemon.sh status mainnet
+
+net-mainnet-stop:
+	./scripts/network_env_daemon.sh stop mainnet
+
+net-testnet-start: package-bin
+	./scripts/network_env_daemon.sh start testnet
+
+net-testnet-once: package-bin
+	./scripts/network_env_daemon.sh once testnet
+
+net-testnet-status:
+	./scripts/network_env_daemon.sh status testnet
+
+net-testnet-stop:
+	./scripts/network_env_daemon.sh stop testnet
+
+net-devnet-start: package-bin
+	./scripts/network_env_daemon.sh start devnet
+
+net-devnet-once: package-bin
+	./scripts/network_env_daemon.sh once devnet
+
+net-devnet-status:
+	./scripts/network_env_daemon.sh status devnet
+
+net-devnet-stop:
+	./scripts/network_env_daemon.sh stop devnet
+
+ops-help:
+	./scripts/aoxc_easy.sh help
+
+ops-doctor:
+	./scripts/aoxc_easy.sh doctor
+
+ops-start-mainnet: package-bin
+	./scripts/aoxc_easy.sh start mainnet
+
+ops-start-testnet: package-bin
+	./scripts/aoxc_easy.sh start testnet
+
+ops-start-devnet: package-bin
+	./scripts/aoxc_easy.sh start devnet
+
+ops-stop-mainnet:
+	./scripts/aoxc_easy.sh stop mainnet
+
+ops-stop-testnet:
+	./scripts/aoxc_easy.sh stop testnet
+
+ops-stop-devnet:
+	./scripts/aoxc_easy.sh stop devnet
+
+ops-status-mainnet:
+	./scripts/aoxc_easy.sh status mainnet
+
+ops-status-testnet:
+	./scripts/aoxc_easy.sh status testnet
+
+ops-status-devnet:
+	./scripts/aoxc_easy.sh status devnet
+
+ops-restart-mainnet: package-bin
+	./scripts/aoxc_easy.sh restart mainnet
+
+ops-restart-testnet: package-bin
+	./scripts/aoxc_easy.sh restart testnet
+
+ops-restart-devnet: package-bin
+	./scripts/aoxc_easy.sh restart devnet
+
+ops-logs-mainnet:
+	./scripts/aoxc_easy.sh logs mainnet
+
+ops-logs-testnet:
+	./scripts/aoxc_easy.sh logs testnet
+
+ops-logs-devnet:
+	./scripts/aoxc_easy.sh logs devnet
