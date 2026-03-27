@@ -8,3 +8,4 @@ serde = { workspace = true }
 tokio = { workspace = true }
 aoxcontract = { path = "../aoxcontract" }
 aoxconfig = { path = "../aoxconfig" }
+thiserror.workspace = true
