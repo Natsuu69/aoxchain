@@ -102,7 +102,8 @@ a {
 }
 
 .grid-section h2,
-.echo-box h2 {
+.echo-box h2,
+.ops-console h2 {
     margin: 0 0 10px;
     font-size: clamp(1rem, 1.5vw, 1.4rem);
 }
