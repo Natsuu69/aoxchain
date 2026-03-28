@@ -1,10 +1,10 @@
 {
   "initialized": true,
   "running": true,
-  "current_height": 355,
-  "produced_blocks": 355,
-  "last_tx": "AOXC_REAL_6_55_1774655531",
-  "updated_at": "2026-03-27T23:52:11.393730535+00:00",
+  "current_height": 1274,
+  "produced_blocks": 1274,
+  "last_tx": "AOXC_REAL_22_14_1774656467",
+  "updated_at": "2026-03-28T00:07:47.245218409+00:00",
   "key_material": {
     "bundle_fingerprint": "7A95ED465E0FFFCC24B0BA63A18360C0",
     "operational_state": "active",
@@ -13,11 +13,11 @@
   },
   "consensus": {
     "network_id": 2626,
-    "last_parent_hash_hex": "3ecfa0b02217e67a9e9beab6ecaed282f95c7634df7518d845e675b0caa36291",
-    "last_block_hash_hex": "4f894e305f46d25d1d8c8d119ef411e9fb5bc76ac4d03221089a3e7337cb562e",
+    "last_parent_hash_hex": "7412121c60403e7ea6800f903781a5da5af7fdb212b0b0cf173b724d631e4b84",
+    "last_block_hash_hex": "7fb7985292f9abf8eca1eefc7e06ec2a5b9e0b007c8e778be1c629e7c7056342",
     "last_proposer_hex": "172b4f7f08a4e81bb6e49462dd820408b77c1afb3352cb207921c9cb1040d1db",
-    "last_round": 355,
-    "last_timestamp_unix": 1774655531,
+    "last_round": 1274,
+    "last_timestamp_unix": 1774656467,
     "last_message_kind": "block_proposal",
     "last_section_count": 1
   }
