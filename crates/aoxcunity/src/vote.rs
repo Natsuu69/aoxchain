@@ -206,11 +206,12 @@ impl VerifiedVote {
 
 #[cfg(test)]
 mod tests {
+    use crate::block::PQ_MANDATORY_START_EPOCH;
     use ed25519_dalek::{Signer, SigningKey};
 
     use super::{
-        AuthenticatedVote, SignedVote, Vote, VoteAuthenticationContext, VoteAuthenticationError,
-        VoteKind,
+        AuthenticatedVote, SIGNATURE_SCHEME_ED25519, SIGNATURE_SCHEME_HYBRID_ED25519_DILITHIUM3,
+        SignedVote, Vote, VoteAuthenticationContext, VoteAuthenticationError, VoteKind,
     };
 
     fn make_vote(block_hash: [u8; 32], round: u64, kind: VoteKind) -> Vote {
