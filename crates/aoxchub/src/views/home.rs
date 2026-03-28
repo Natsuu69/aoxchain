@@ -1,8 +1,107 @@
 use dioxus::prelude::*;
 
 use crate::components::glass::GlassSurface;
+use crate::services::telemetry::latest_snapshot;
 use crate::state::GlobalChainState;
 use crate::types::LaneStatus;
+
+#[derive(Clone, Copy, PartialEq)]
+enum NetworkProfile {
+    Mainnet,
+    Devnet,
+    Testnet,
+}
+
+impl NetworkProfile {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Mainnet => "Mainnet",
+            Self::Devnet => "Devnet",
+            Self::Testnet => "Testnet",
+        }
+    }
+
+    fn rpc_endpoint(self) -> &'static str {
+        match self {
+            Self::Mainnet => "https://rpc.mainnet.aoxchain.io",
+            Self::Devnet => "https://rpc.devnet.aoxchain.io",
+            Self::Testnet => "https://rpc.testnet.aoxchain.io",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct CommandSpec {
+    command: &'static str,
+    purpose: &'static str,
+    status: &'static str,
+}
+
+const MAKE_COMMANDS: [CommandSpec; 6] = [
+    CommandSpec {
+        command: "make build",
+        purpose: "Tüm binary hedeflerini derler",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "make test",
+        purpose: "Çekirdek test süitini çalıştırır",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "make test-mainnet-compat",
+        purpose: "Mainnet binary uyumu kontrolü",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "make test-devnet-compat",
+        purpose: "Devnet binary uyumu kontrolü",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "make telemetry-drill",
+        purpose: "Telemetry pipeline doğrulaması",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "make desktop-release",
+        purpose: "Desktop paketi üretimi",
+        status: "preview",
+    },
+];
+
+const AOXC_CLI_COMMANDS: [CommandSpec; 6] = [
+    CommandSpec {
+        command: "aoxc wallet status",
+        purpose: "Wallet health ve bakiye kontrolü",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "aoxc wallet transfer --dry-run",
+        purpose: "Transfer senaryosunu güvenli simüle eder",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "aoxc explorer block latest",
+        purpose: "En son blok özetini getirir",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "aoxc explorer tx <hash>",
+        purpose: "Tekil işlem inceleme",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "aoxc telemetry snapshot",
+        purpose: "Anlık telemetry metriklerini döker",
+        status: "stable",
+    },
+    CommandSpec {
+        command: "aoxc telemetry stream",
+        purpose: "Canlı telemetry olay akışı",
+        status: "preview",
+    },
+];
 
 #[component]
 pub fn Home() -> Element {
@@ -73,6 +172,20 @@ pub fn Home() -> Element {
                     }
                 }
             }
+
+            div { class: "grid gap-4 md:grid-cols-2 xl:grid-cols-4",
+                MetricCard { title: "Current Block".to_string(), value: format!("#{}", chain_snapshot.height), hint: "L1 finalized".to_string() }
+                MetricCard { title: "Aggregate TPS".to_string(), value: format!("{total_tps:.1}"), hint: "Cross-runtime".to_string() }
+                MetricCard { title: "Network Health".to_string(), value: format!("{:.2}%", chain_snapshot.network_health), hint: format!("{offline_nodes} offline / {} active", chain_snapshot.active_nodes) }
+                MetricCard { title: "RPC Endpoint".to_string(), value: profile().rpc_endpoint().to_string(), hint: format!("{} profile", profile().title()) }
+            }
+
+            CompatibilityPanel {}
+            TelemetryPanel { telemetry_source: telemetry.source, telemetry_ok: telemetry.healthy }
+            WalletPanel {}
+            ExplorerPanel { chain: explorer_chain }
+            CommandPanel { title: "Make Komutları".to_string(), commands: MAKE_COMMANDS.to_vec() }
+            CommandPanel { title: "AOXC CLI Komutları".to_string(), commands: AOXC_CLI_COMMANDS.to_vec() }
         }
     }
 }
