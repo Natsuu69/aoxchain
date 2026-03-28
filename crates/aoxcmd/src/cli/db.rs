@@ -247,51 +247,13 @@ mod tests {
         cmd_db_put_block, cmd_db_status, count_ipfs_objects, db_root, open_store, parse_backend,
         parse_required_arg, parse_u64_arg,
     };
-    use crate::test_support::TestHome;
+    use crate::test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome};
     use aoxcdata::{HybridDataStore, IndexBackend};
     use sha2::{Digest, Sha256};
-    use std::{
-        env, fs,
-        path::PathBuf,
-        sync::{Mutex, OnceLock},
-    };
-
-    fn test_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    /// Process-wide guard for the effective AOXC home.
-    ///
-    /// The CLI path resolution surface uses environment state, so tests must
-    /// serialize access and restore the previous value even if a prior test
-    /// panicked.
-    struct AoxcHomeGuard {
-        previous: Option<std::ffi::OsString>,
-    }
-
-    impl AoxcHomeGuard {
-        fn install(root: &std::path::Path) -> Self {
-            let previous = env::var_os("AOXC_HOME");
-            env::set_var("AOXC_HOME", root);
-            Self { previous }
-        }
-    }
-
-    impl Drop for AoxcHomeGuard {
-        fn drop(&mut self) {
-            match self.previous.take() {
-                Some(value) => env::set_var("AOXC_HOME", value),
-                None => env::remove_var("AOXC_HOME"),
-            }
-        }
-    }
+    use std::{fs, path::PathBuf};
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {
-        let _lock = test_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-
+        let _lock = aoxc_home_test_lock();
         let home = TestHome::new(label);
         let _guard = AoxcHomeGuard::install(home.path());
         test(&home)

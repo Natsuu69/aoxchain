@@ -6,6 +6,7 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     process,
+    sync::{Mutex, MutexGuard, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -38,6 +39,48 @@ fn unique_test_home(label: &str) -> PathBuf {
     canonical_data_root()
         .join(".test")
         .join(format!("aoxcmd-{label}-pid{}-{nanos}", process::id()))
+}
+
+/// Returns the shared process-wide lock used by tests that mutate `AOXC_HOME`.
+///
+/// Security and determinism rationale:
+/// - `AOXC_HOME` is process-global mutable state.
+/// - Any test that mutates it must serialize access across the crate.
+/// - Poisoned state is explicitly tolerated so one panic does not cascade into
+///   unrelated failures in later tests.
+pub(crate) fn aoxc_home_test_lock() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// RAII guard that installs and restores `AOXC_HOME`.
+///
+/// Usage contract:
+/// - Acquire `aoxc_home_test_lock()` first.
+/// - Install this guard for the duration of the test body.
+/// - Allow automatic restoration on drop.
+pub(crate) struct AoxcHomeGuard {
+    previous: Option<std::ffi::OsString>,
+}
+
+impl AoxcHomeGuard {
+    /// Installs a temporary AOXC home override for the current process.
+    pub(crate) fn install(root: &Path) -> Self {
+        let previous = env::var_os("AOXC_HOME");
+        env::set_var("AOXC_HOME", root);
+        Self { previous }
+    }
+}
+
+impl Drop for AoxcHomeGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => env::set_var("AOXC_HOME", value),
+            None => env::remove_var("AOXC_HOME"),
+        }
+    }
 }
 
 /// Test helper that provides an isolated AOXC home for a single test execution.
