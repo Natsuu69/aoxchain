@@ -168,9 +168,7 @@ impl fmt::Display for MessageEnvelopeError {
             Self::ZeroProofReference => {
                 f.write_str("proof_reference must not be zero when present")
             }
-            Self::ZeroReplayProtectionTag => {
-                f.write_str("replay_protection_tag must not be zero")
-            }
+            Self::ZeroReplayProtectionTag => f.write_str("replay_protection_tag must not be zero"),
             Self::ExpiryMustBeNonZeroWhenPresent => {
                 f.write_str("expiry must be non-zero when present")
             }

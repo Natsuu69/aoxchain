@@ -59,8 +59,7 @@ fn serialize_pretty_json<T>(value: &T) -> Result<String, String>
 where
     T: Serialize,
 {
-    serde_json::to_string_pretty(value)
-        .map_err(|error| format!("JSON_SERIALIZE_ERROR: {}", error))
+    serde_json::to_string_pretty(value).map_err(|error| format!("JSON_SERIALIZE_ERROR: {}", error))
 }
 
 #[cfg(test)]
@@ -87,9 +86,7 @@ mod tests {
         )
         .expect("bundle generation must succeed");
 
-        bundle
-            .to_json()
-            .expect("bundle JSON encoding must succeed")
+        bundle.to_json().expect("bundle JSON encoding must succeed")
     }
 
     #[test]

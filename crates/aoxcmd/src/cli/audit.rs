@@ -528,9 +528,11 @@ mod tests {
             .expect("check should succeed");
 
         assert!(check.passed);
-        assert!(check
-            .detail
-            .contains("Verified hardened sensitive file permissions"));
+        assert!(
+            check
+                .detail
+                .contains("Verified hardened sensitive file permissions")
+        );
     }
 
     #[test]

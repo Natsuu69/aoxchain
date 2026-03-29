@@ -238,10 +238,10 @@ fn normalize_required_subject(value: &str, field: &str) -> Result<String, AppErr
 
 #[cfg(test)]
 mod tests {
-    use super::{delegate, load, persist, transfer, undelegate, LedgerState};
+    use super::{LedgerState, delegate, load, persist, transfer, undelegate};
     use crate::{
         error::ErrorCode,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {

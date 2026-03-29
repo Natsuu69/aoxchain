@@ -100,10 +100,10 @@ pub fn now(node_height: u64, produced_blocks: u64, treasury_balance: u64) -> Met
 
 #[cfg(test)]
 mod tests {
-    use super::{metrics_path, now, persist_metrics, MetricsSnapshot};
+    use super::{MetricsSnapshot, metrics_path, now, persist_metrics};
     use crate::{
         error::ErrorCode,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
     use chrono::Utc;
 

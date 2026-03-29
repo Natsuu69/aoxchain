@@ -192,7 +192,7 @@ fn default_last_tx() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_last_tx, zero_hash_hex, NodeState};
+    use super::{NodeState, default_last_tx, zero_hash_hex};
 
     #[test]
     fn bootstrap_initializes_consensus_snapshot() {

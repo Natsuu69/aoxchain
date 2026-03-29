@@ -48,7 +48,10 @@ fn open_or_create_db(path: &Path) -> Result<Database, AppError> {
     Database::create(path).map_err(|error| {
         AppError::with_source(
             ErrorCode::FilesystemIoFailed,
-            format!("Failed to open or create ledger redb database {}", path.display()),
+            format!(
+                "Failed to open or create ledger redb database {}",
+                path.display()
+            ),
             error,
         )
     })
@@ -177,7 +180,7 @@ mod tests {
     use crate::{
         economy::ledger::LedgerState,
         error::ErrorCode,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {
@@ -192,7 +195,10 @@ mod tests {
         with_test_home("ledger-redb-path", |home| {
             let path = ledger_redb_path().expect("ledger redb path must resolve");
 
-            assert_eq!(path, home.path().join("ledger").join("db").join("main.redb"));
+            assert_eq!(
+                path,
+                home.path().join("ledger").join("db").join("main.redb")
+            );
         });
     }
 
@@ -216,8 +222,7 @@ mod tests {
             let mut ledger = LedgerState::new();
             ledger.delegations.insert("   ".to_string(), 10);
 
-            let error =
-                persist_ledger_redb(&ledger).expect_err("invalid ledger must be rejected");
+            let error = persist_ledger_redb(&ledger).expect_err("invalid ledger must be rejected");
 
             assert_eq!(error.code(), ErrorCode::LedgerInvalid.as_str());
         });

@@ -88,7 +88,7 @@ fn derive_correlation_id(command: &str, recorded_at: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{derive_correlation_id, new_context, normalize_command_name, TraceContext};
+    use super::{TraceContext, derive_correlation_id, new_context, normalize_command_name};
 
     #[test]
     fn normalize_command_name_preserves_canonical_command() {

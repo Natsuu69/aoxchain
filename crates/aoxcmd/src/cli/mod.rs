@@ -38,9 +38,7 @@ pub fn run_cli() -> Result<(), AppError> {
         .filter(|value| !value.trim().is_empty())
         .map(std::path::PathBuf::from);
 
-    let _home_override_guard = home_override
-        .as_deref()
-        .map(ScopedHomeOverride::install);
+    let _home_override_guard = home_override.as_deref().map(ScopedHomeOverride::install);
 
     if args.len() < 2 {
         print_usage(lang);

@@ -61,7 +61,7 @@ pub fn unity_status() -> UnityStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::{unity_status, UnityStatus};
+    use super::{UnityStatus, unity_status};
 
     #[test]
     fn unity_status_returns_canonical_bootstrap_consensus_surface() {

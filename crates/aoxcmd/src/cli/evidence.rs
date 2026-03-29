@@ -280,9 +280,9 @@ fn compute_evidence_id(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_evidence_id, normalize_text_value, parse_limit_arg, parse_optional_category_filter,
-        parse_optional_text_arg, parse_required_text_arg, DEFAULT_EVIDENCE_COMMAND,
-        DEFAULT_EVIDENCE_PROFILE, DEFAULT_EVIDENCE_SUBJECT, MAX_LIST_LIMIT,
+        DEFAULT_EVIDENCE_COMMAND, DEFAULT_EVIDENCE_PROFILE, DEFAULT_EVIDENCE_SUBJECT,
+        MAX_LIST_LIMIT, compute_evidence_id, normalize_text_value, parse_limit_arg,
+        parse_optional_category_filter, parse_optional_text_arg, parse_required_text_arg,
     };
 
     fn args(items: &[&str]) -> Vec<String> {

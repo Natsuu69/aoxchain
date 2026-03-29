@@ -80,8 +80,8 @@ fn has_unique_names(registry: &[ServiceDescriptor]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_registry, registry_is_valid, ServiceDescriptor, SERVICE_CONFIG, SERVICE_ECONOMY,
-        SERVICE_KEYS, SERVICE_NODE, SERVICE_TELEMETRY,
+        SERVICE_CONFIG, SERVICE_ECONOMY, SERVICE_KEYS, SERVICE_NODE, SERVICE_TELEMETRY,
+        ServiceDescriptor, default_registry, registry_is_valid,
     };
 
     #[test]

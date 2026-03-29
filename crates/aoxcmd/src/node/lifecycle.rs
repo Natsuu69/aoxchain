@@ -7,9 +7,9 @@ use crate::{
     keys::manager::inspect_operator_key,
     node::state::NodeState,
     storage::{
+        RuntimeStateStore,
         json_runtime::JsonRuntimeStateStore,
         redb_chain::{append_chain_log, load_node_state, main_redb_path, persist_node_state},
-        RuntimeStateStore,
     },
 };
 use std::path::PathBuf;
@@ -132,7 +132,7 @@ mod tests {
         error::ErrorCode,
         keys::manager::bootstrap_operator_key,
         node::state::NodeState,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     /// Executes a lifecycle test inside a process-safe isolated AOXC home.

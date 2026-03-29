@@ -136,8 +136,8 @@ impl GenesisLoader {
             )));
         }
 
-        let config: GenesisConfig =
-            serde_json::from_str(&data).map_err(|error| GenesisError::ParseError(error.to_string()))?;
+        let config: GenesisConfig = serde_json::from_str(&data)
+            .map_err(|error| GenesisError::ParseError(error.to_string()))?;
 
         config.validate()?;
         let fingerprint_hex = config.fingerprint()?;
@@ -349,9 +349,7 @@ impl GenesisLoader {
     /// Future rationale:
     /// Genesis artifacts are expected to evolve toward signed distribution
     /// workflows. This function intentionally exists as a stable upgrade point.
-    pub fn verify_detached_signature_sidecar<P: AsRef<Path>>(
-        path: P,
-    ) -> Result<(), GenesisError> {
+    pub fn verify_detached_signature_sidecar<P: AsRef<Path>>(path: P) -> Result<(), GenesisError> {
         let signature_path = signature_sidecar_path(path.as_ref());
 
         if !signature_path.exists() {
@@ -367,7 +365,8 @@ impl GenesisLoader {
 
 /// Validates the input genesis path before attempting a read.
 fn validate_input_path(path: &Path) -> Result<(), GenesisError> {
-    let metadata = fs::metadata(path).map_err(|error| GenesisError::ReadError(error.to_string()))?;
+    let metadata =
+        fs::metadata(path).map_err(|error| GenesisError::ReadError(error.to_string()))?;
 
     if !metadata.is_file() {
         return Err(GenesisError::ReadError(format!(
@@ -613,8 +612,10 @@ mod tests {
 
     #[test]
     fn load_artifact_verifies_matching_fingerprint_sidecar() {
-        let temp_dir = std::env::temp_dir()
-            .join(format!("aoxc-genesis-load-artifact-test-{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "aoxc-genesis-load-artifact-test-{}",
+            std::process::id()
+        ));
         fs::create_dir_all(&temp_dir).expect("temp dir must be created");
 
         let path = temp_dir.join("genesis.json");

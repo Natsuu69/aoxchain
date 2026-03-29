@@ -70,18 +70,14 @@ impl fmt::Display for ReceiptError {
             Self::LengthOverflow => {
                 f.write_str("canonical receipt encoding exceeds supported length bounds")
             }
-            Self::ZeroTransactionHash => {
-                f.write_str("transaction_hash must not be zero")
-            }
+            Self::ZeroTransactionHash => f.write_str("transaction_hash must not be zero"),
             Self::SuccessReceiptMustNotContainErrorCode => {
                 f.write_str("successful receipt must not contain an error_code")
             }
             Self::FailureReceiptMustContainErrorCode => {
                 f.write_str("failed receipt must contain an error_code")
             }
-            Self::EventDataTooLarge => {
-                f.write_str("event data exceeds the maximum canonical size")
-            }
+            Self::EventDataTooLarge => f.write_str("event data exceeds the maximum canonical size"),
             Self::TooManyEvents => {
                 f.write_str("receipt contains more events than the canonical maximum")
             }

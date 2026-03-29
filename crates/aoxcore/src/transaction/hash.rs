@@ -189,9 +189,7 @@ pub fn empty_transaction_root() -> [u8; HASH_SIZE] {
 ///
 /// This is distinct from the raw `Transaction::signing_message()` byte vector
 /// and intentionally bound to a dedicated hashing namespace.
-pub fn try_hash_signing_payload(
-    tx: &Transaction,
-) -> Result<[u8; HASH_SIZE], TransactionHashError> {
+pub fn try_hash_signing_payload(tx: &Transaction) -> Result<[u8; HASH_SIZE], TransactionHashError> {
     let mut hasher = new_tagged_hasher(DOMAIN_SIGNING_PAYLOAD);
 
     update_bytes32(&mut hasher, &tx.sender);
@@ -260,8 +258,7 @@ pub fn try_hash_transaction(tx: &Transaction) -> Result<[u8; HASH_SIZE], Transac
 /// transaction payload violates the canonical length model.
 #[must_use]
 pub fn hash_transaction(tx: &Transaction) -> [u8; HASH_SIZE] {
-    try_hash_transaction(tx)
-        .expect("signed transaction must satisfy canonical length bounds")
+    try_hash_transaction(tx).expect("signed transaction must satisfy canonical length bounds")
 }
 
 /// Computes the canonical transaction leaf hash used in collection-root

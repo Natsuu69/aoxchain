@@ -69,7 +69,7 @@ pub fn default_handles() -> RuntimeHandleSet {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_handles, RuntimeHandleSet};
+    use super::{RuntimeHandleSet, default_handles};
 
     #[test]
     fn default_handles_returns_canonical_logical_runtime_handles() {

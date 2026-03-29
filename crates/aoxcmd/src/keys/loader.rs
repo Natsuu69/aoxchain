@@ -95,7 +95,7 @@ mod tests {
     use crate::{
         error::ErrorCode,
         keys::material::KeyMaterial,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     /// Executes a loader test inside a process-safe isolated AOXC home.

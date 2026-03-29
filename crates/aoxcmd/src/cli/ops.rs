@@ -572,7 +572,7 @@ fn load_full_surface_matrix(
                 matrix_path_string,
                 None,
                 vec![format!("Unable to read canonical matrix: {error}")],
-            )
+            );
         }
     };
 
@@ -1737,8 +1737,7 @@ fn compare_network_profile_pair(
             mainnet: normalized_port_pair(&mainnet.listen_addr, &mainnet.rpc_addr),
             testnet: normalized_port_pair(&testnet.listen_addr, &testnet.rpc_addr),
             passed: ports_are_shifted_consistently(&mainnet, &testnet),
-            expectation:
-                "Testnet should differ only by deterministic port offsets, not by capability shape",
+            expectation: "Testnet should differ only by deterministic port offsets, not by capability shape",
         },
     ];
 
@@ -2393,10 +2392,12 @@ mod tests {
         assert_eq!(readiness.track_progress[0].ratio, 100);
         assert_eq!(readiness.track_progress[1].ratio, 100);
         assert!(readiness.next_focus.is_empty());
-        assert!(readiness
-            .area_progress
-            .iter()
-            .all(|progress| progress.ratio == 100));
+        assert!(
+            readiness
+                .area_progress
+                .iter()
+                .all(|progress| progress.ratio == 100)
+        );
     }
 
     #[test]
@@ -2421,10 +2422,12 @@ mod tests {
             .expect("mainnet track should exist");
 
         assert!(testnet.ratio > mainnet.ratio);
-        assert!(readiness
-            .next_focus
-            .iter()
-            .any(|entry| entry.starts_with("configuration:")));
+        assert!(
+            readiness
+                .next_focus
+                .iter()
+                .any(|entry| entry.starts_with("configuration:"))
+        );
     }
 
     #[test]
@@ -2437,14 +2440,18 @@ mod tests {
         let readiness =
             evaluate_profile_readiness("testnet", &settings, None, Some("active"), true, true);
 
-        assert!(readiness
-            .blockers
-            .iter()
-            .any(|entry| entry.starts_with("testnet-profile:")));
-        assert!(readiness
-            .remediation_plan
-            .iter()
-            .any(|step| step.contains("--profile testnet")));
+        assert!(
+            readiness
+                .blockers
+                .iter()
+                .any(|entry| entry.starts_with("testnet-profile:"))
+        );
+        assert!(
+            readiness
+                .remediation_plan
+                .iter()
+                .any(|step| step.contains("--profile testnet"))
+        );
     }
 
     #[test]
@@ -2496,30 +2503,36 @@ mod tests {
         );
         assert_eq!(full.total_surfaces, 6);
         assert_eq!(full.surfaces.len(), 6);
-        assert!(full
-            .surfaces
-            .iter()
-            .any(|surface| surface.surface == "mainnet"));
-        assert!(full
-            .surfaces
-            .iter()
-            .any(|surface| surface.surface == "testnet"));
-        assert!(full
-            .surfaces
-            .iter()
-            .any(|surface| surface.surface == "aoxhub"));
-        assert!(full
-            .surfaces
-            .iter()
-            .any(|surface| surface.surface == "devnet"));
-        assert!(full
-            .surfaces
-            .iter()
-            .any(|surface| surface.surface == "desktop-wallet"));
-        assert!(full
-            .surfaces
-            .iter()
-            .any(|surface| surface.surface == "telemetry"));
+        assert!(
+            full.surfaces
+                .iter()
+                .any(|surface| surface.surface == "mainnet")
+        );
+        assert!(
+            full.surfaces
+                .iter()
+                .any(|surface| surface.surface == "testnet")
+        );
+        assert!(
+            full.surfaces
+                .iter()
+                .any(|surface| surface.surface == "aoxhub")
+        );
+        assert!(
+            full.surfaces
+                .iter()
+                .any(|surface| surface.surface == "devnet")
+        );
+        assert!(
+            full.surfaces
+                .iter()
+                .any(|surface| surface.surface == "desktop-wallet")
+        );
+        assert!(
+            full.surfaces
+                .iter()
+                .any(|surface| surface.surface == "telemetry")
+        );
     }
 
     #[test]

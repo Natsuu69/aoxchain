@@ -333,11 +333,11 @@ pub fn cmd_db_compact(args: &[String]) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_label, build_status, cmd_db_compact, cmd_db_get_hash, cmd_db_get_height,
-        cmd_db_init, cmd_db_put_block, cmd_db_status, count_ipfs_objects, db_root, open_store,
-        parse_backend, parse_required_arg, parse_u64_arg, DEFAULT_INDEX_BACKEND,
+        DEFAULT_INDEX_BACKEND, backend_label, build_status, cmd_db_compact, cmd_db_get_hash,
+        cmd_db_get_height, cmd_db_init, cmd_db_put_block, cmd_db_status, count_ipfs_objects,
+        db_root, open_store, parse_backend, parse_required_arg, parse_u64_arg,
     };
-    use crate::test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome};
+    use crate::test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock};
     use aoxcdata::{HybridDataStore, IndexBackend};
     use sha2::{Digest, Sha256};
     use std::{fs, path::PathBuf};

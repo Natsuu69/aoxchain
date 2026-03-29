@@ -7,9 +7,9 @@ use crate::{
     error::{AppError, ErrorCode},
     node::state::NodeState,
     storage::{
-        redb_ledger::{load_ledger_redb, persist_ledger_redb},
-        redb_runtime::{runtime_state_redb_path, RedbRuntimeStateStore},
         RuntimeStateStore,
+        redb_ledger::{load_ledger_redb, persist_ledger_redb},
+        redb_runtime::{RedbRuntimeStateStore, runtime_state_redb_path},
     },
 };
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
@@ -187,13 +187,15 @@ pub fn append_chain_log(domain: &str, action: &str, details: &str) -> Result<(),
             )
         })?;
 
-        table.insert(next_sequence, payload.as_str()).map_err(|error| {
-            AppError::with_source(
-                ErrorCode::FilesystemIoFailed,
-                "Failed to append chain-log entry into runtime redb",
-                error,
-            )
-        })?;
+        table
+            .insert(next_sequence, payload.as_str())
+            .map_err(|error| {
+                AppError::with_source(
+                    ErrorCode::FilesystemIoFailed,
+                    "Failed to append chain-log entry into runtime redb",
+                    error,
+                )
+            })?;
     }
 
     write_txn.commit().map_err(|error| {
@@ -290,7 +292,7 @@ mod tests {
         economy::ledger::LedgerState,
         error::ErrorCode,
         node::state::NodeState,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {

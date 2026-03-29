@@ -1,11 +1,5 @@
-mod dashboard;
-mod domains;
-mod operations;
-mod overview;
-mod wallet;
-
-pub use dashboard::DashboardSection;
-pub use domains::DomainSections;
-pub use operations::OperationsSection;
-pub use overview::OverviewSection;
-pub use wallet::WalletSetupSection;
+pub mod dashboard;
+pub mod domains;
+pub mod operations;
+pub mod overview;
+pub mod wallet;
