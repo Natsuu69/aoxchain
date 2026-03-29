@@ -1,6 +1,10 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use super::menus::{
+    DashboardSection, DomainSections, OperationsSection, OverviewSection, WalletSetupSection,
+};
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct ProfileSnapshot {
     profile: String,
@@ -62,6 +66,26 @@ pub fn Home() -> Element {
     rsx! {
         div {
             class: "hub-page",
+            section {
+                id: "wallet-setup",
+                class: "panel glass",
+                h2 { "Wallet Onboarding" }
+                p { class: "hero-sub", "İlk menü cüzdan oluşturma ile başlar: adres üretimi, yedekleme, fonlama ve politika bağlama adımları tek akışta yönetilir." }
+                div {
+                    class: "wallet-steps",
+                    for (index, title, detail) in wallet_steps {
+                        article {
+                            class: "wallet-step",
+                            span { class: "wallet-step-index", "{index}" }
+                            div {
+                                p { class: "wallet-step-title", "{title}" }
+                                p { class: "wallet-step-detail", "{detail}" }
+                            }
+                        }
+                    }
+                }
+            }
+
             section {
                 id: "overview",
                 class: "hero glass",
