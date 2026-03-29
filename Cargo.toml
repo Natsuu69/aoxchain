@@ -20,7 +20,7 @@ members = [
     "crates/aoxcunity",
     "crates/aoxcvm",
     "crates/aoxchub",
-    "tests",
+    "tests", "crates/aoxchub",
 ]
 
 [workspace.package]
