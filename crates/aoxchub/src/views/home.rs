@@ -1,6 +1,10 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use super::menus::{
+    DashboardSection, DomainSections, OperationsSection, OverviewSection, WalletSetupSection,
+};
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct ProfileSnapshot {
     profile: String,

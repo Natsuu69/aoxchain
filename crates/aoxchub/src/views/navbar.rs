@@ -1,6 +1,8 @@
 use crate::Route;
 use dioxus::prelude::*;
 
+use super::layout::{FooterBar, HeaderBar, SidebarMenu};
+
 #[component]
 pub fn Navbar() -> Element {
     let menu_items = [
