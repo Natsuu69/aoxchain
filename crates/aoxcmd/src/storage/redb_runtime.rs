@@ -192,12 +192,12 @@ impl RuntimeStateStore for RedbRuntimeStateStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{runtime_state_redb_path, RedbRuntimeStateStore};
+    use super::{RedbRuntimeStateStore, runtime_state_redb_path};
     use crate::{
         error::ErrorCode,
         node::state::NodeState,
         storage::RuntimeStateStore,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {

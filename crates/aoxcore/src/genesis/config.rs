@@ -429,7 +429,8 @@ impl GenesisConfig {
         validate_protocol_version(&self.protocol_version)?;
         validate_genesis_notes(&self.genesis_notes)?;
 
-        self.quantum_policy.validate_for_network_class(self.identity.network_class)?;
+        self.quantum_policy
+            .validate_for_network_class(self.identity.network_class)?;
 
         self.settlement_link.validate()?;
         self.genesis_seal.validate()?;
@@ -673,7 +674,9 @@ fn validate_unique_validator_ids(validators: &[Validator]) -> Result<(), Genesis
     Ok(())
 }
 
-fn validate_unique_account_addresses(accounts: &[GenesisAccount]) -> Result<(), GenesisConfigError> {
+fn validate_unique_account_addresses(
+    accounts: &[GenesisAccount],
+) -> Result<(), GenesisConfigError> {
     let mut seen = HashSet::with_capacity(accounts.len());
 
     for account in accounts {
@@ -909,8 +912,10 @@ pub struct GenesisAccount {
 
 impl GenesisAccount {
     fn validate(&self) -> Result<(), GenesisConfigError> {
-        validate_identifier(&self.address).map_err(|_| GenesisConfigError::DuplicateAccountAddress {
-            address: self.address.clone(),
+        validate_identifier(&self.address).map_err(|_| {
+            GenesisConfigError::DuplicateAccountAddress {
+                address: self.address.clone(),
+            }
         })
     }
 
@@ -1084,7 +1089,11 @@ impl QuantumPolicy {
                 });
             }
 
-            if !self.pq_signature_schemes.iter().any(|alg| alg == "ML-DSA-87") {
+            if !self
+                .pq_signature_schemes
+                .iter()
+                .any(|alg| alg == "ML-DSA-87")
+            {
                 return Err(GenesisConfigError::WeakQuantumPolicy {
                     reason: "public mainnet requires ML-DSA-87 in the PQ signature policy",
                 });
@@ -1249,8 +1258,8 @@ impl CanonicalEncoder {
     }
 
     fn usize(&mut self, value: usize) -> Result<(), GenesisConfigError> {
-        let casted =
-            u64::try_from(value).map_err(|_| GenesisConfigError::CanonicalEncodingLengthOverflow)?;
+        let casted = u64::try_from(value)
+            .map_err(|_| GenesisConfigError::CanonicalEncodingLengthOverflow)?;
         self.u64(casted);
         Ok(())
     }
@@ -1358,14 +1367,9 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_validator_ids() {
-        let identity = ChainIdentity::new(
-            AOXC_FAMILY_ID,
-            NetworkClass::Devnet,
-            3,
-            1,
-            "AOXC Kivilcim",
-        )
-        .unwrap();
+        let identity =
+            ChainIdentity::new(AOXC_FAMILY_ID, NetworkClass::Devnet, 3, 1, "AOXC Kivilcim")
+                .unwrap();
 
         let err = GenesisConfig::new(
             identity,
@@ -1388,7 +1392,10 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(err, GenesisConfigError::DuplicateValidatorId { .. }));
+        assert!(matches!(
+            err,
+            GenesisConfigError::DuplicateValidatorId { .. }
+        ));
     }
 
     #[test]

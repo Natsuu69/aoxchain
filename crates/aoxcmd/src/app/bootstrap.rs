@@ -40,7 +40,7 @@ mod tests {
     use super::bootstrap_operator_home;
     use crate::{
         config::loader::settings_path,
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {
@@ -59,9 +59,11 @@ mod tests {
             assert!(home.path().join("keys").is_dir());
             assert!(home.path().join("runtime").is_dir());
             assert!(home.path().join("telemetry").is_dir());
-            assert!(settings_path()
-                .expect("settings path should resolve")
-                .is_file());
+            assert!(
+                settings_path()
+                    .expect("settings path should resolve")
+                    .is_file()
+            );
         });
     }
 

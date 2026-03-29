@@ -83,7 +83,10 @@ pub struct NonZeroHash32([u8; 32]);
 
 impl NonZeroHash32 {
     /// Creates a validated non-zero hash.
-    pub fn new(bytes: [u8; 32], zero_error: AssetRegistryError) -> Result<Self, AssetRegistryError> {
+    pub fn new(
+        bytes: [u8; 32],
+        zero_error: AssetRegistryError,
+    ) -> Result<Self, AssetRegistryError> {
         if bytes == [0u8; 32] {
             return Err(zero_error);
         }
@@ -156,11 +159,7 @@ impl AssetSymbol {
             return Err(AssetRegistryError::InvalidSymbolFormat);
         }
 
-        if !value
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_uppercase())
-        {
+        if !value.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
             return Err(AssetRegistryError::InvalidSymbolFormat);
         }
 
@@ -348,8 +347,7 @@ impl AssetRegistryEntry {
         let issuer = IssuerId::new(issuer)?;
         let metadata_hash =
             NonZeroHash32::new(metadata_hash, AssetRegistryError::ZeroMetadataHash)?;
-        let policy_hash =
-            NonZeroHash32::new(policy_hash, AssetRegistryError::ZeroPolicyHash)?;
+        let policy_hash = NonZeroHash32::new(policy_hash, AssetRegistryError::ZeroPolicyHash)?;
         let display_name = DisplayName::new(display_name)?;
         let symbol = AssetSymbol::new(symbol)?;
         let asset_code = AssetCode::new(asset_code, asset_class, supply_model)?;
@@ -475,11 +473,11 @@ impl AssetRegistryEntry {
     fn validate_supply_policy(&self) -> Result<(), AssetRegistryError> {
         match self.supply_model {
             SupplyModel::FixedGenesis => {
-                let max_supply = self.max_supply.ok_or(
-                    AssetRegistryError::MissingMaxSupplyForSupplyModel {
-                        supply_model: self.supply_model,
-                    },
-                )?;
+                let max_supply =
+                    self.max_supply
+                        .ok_or(AssetRegistryError::MissingMaxSupplyForSupplyModel {
+                            supply_model: self.supply_model,
+                        })?;
 
                 if max_supply == 0 {
                     return Err(AssetRegistryError::ZeroMaxSupply);
@@ -763,7 +761,11 @@ impl fmt::Display for AssetRegistryError {
                 provided, maximum
             ),
             Self::MissingMaxSupplyForSupplyModel { supply_model } => {
-                write!(f, "max supply is required for supply model {:?}", supply_model)
+                write!(
+                    f,
+                    "max supply is required for supply model {:?}",
+                    supply_model
+                )
             }
             Self::ZeroMaxSupply => write!(f, "max supply must be greater than zero"),
             Self::UnexpectedMaxSupplyForSupplyModel { supply_model } => write!(
@@ -803,14 +805,21 @@ impl fmt::Display for AssetRegistryError {
                 "risk grade {:?} is incompatible with asset class {:?}",
                 risk_grade, asset_class
             ),
-            Self::InvalidStatusForAssetClass { asset_class, status } => write!(
+            Self::InvalidStatusForAssetClass {
+                asset_class,
+                status,
+            } => write!(
                 f,
                 "registry status {:?} is incompatible with asset class {:?}",
                 status, asset_class
             ),
             Self::InvalidCreatedAtEpoch => write!(f, "created_at_epoch is invalid"),
             Self::InvalidStatusTransition { from, to } => {
-                write!(f, "registry status transition is invalid: {:?} -> {:?}", from, to)
+                write!(
+                    f,
+                    "registry status transition is invalid: {:?} -> {:?}",
+                    from, to
+                )
             }
         }
     }
@@ -882,9 +891,7 @@ fn validate_asset_code_structure(value: &str) -> Result<(), AssetRegistryError> 
         });
     }
 
-    if parts[3].len() != ASSET_CODE_SEQUENCE_LEN
-        || !parts[3].chars().all(|c| c.is_ascii_digit())
-    {
+    if parts[3].len() != ASSET_CODE_SEQUENCE_LEN || !parts[3].chars().all(|c| c.is_ascii_digit()) {
         return Err(AssetRegistryError::InvalidAssetCodeSequenceSegment {
             found: parts[3].to_owned(),
         });

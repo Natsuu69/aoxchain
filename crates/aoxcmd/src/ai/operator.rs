@@ -313,9 +313,11 @@ mod tests {
         let outcome = adapter.diagnostics_assistance(request());
         let artifact = outcome.artifact.expect("artifact should be present");
 
-        assert!(artifact
-            .summary
-            .contains("Native diagnostics verdict is 'fail'"));
+        assert!(
+            artifact
+                .summary
+                .contains("Native diagnostics verdict is 'fail'")
+        );
     }
 
     #[test]

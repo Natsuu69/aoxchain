@@ -47,7 +47,7 @@ mod tests {
     use super::graceful_shutdown;
     use crate::{
         node::{lifecycle::persist_state, state::NodeState},
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {

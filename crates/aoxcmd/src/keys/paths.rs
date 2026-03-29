@@ -24,7 +24,7 @@ pub fn operator_key_path() -> Result<PathBuf, AppError> {
 #[cfg(test)]
 mod tests {
     use super::operator_key_path;
-    use crate::test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome};
+    use crate::test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock};
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {
         let _lock = aoxc_home_test_lock();
@@ -47,10 +47,11 @@ mod tests {
         with_test_home("keys-path-filename", |_home| {
             let path = operator_key_path().expect("operator key path must resolve");
 
-            assert!(path
-                .display()
-                .to_string()
-                .ends_with("keys/operator_key.json"));
+            assert!(
+                path.display()
+                    .to_string()
+                    .ends_with("keys/operator_key.json")
+            );
         });
     }
 }

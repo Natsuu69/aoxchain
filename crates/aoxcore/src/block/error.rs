@@ -432,9 +432,7 @@ impl BlockError {
             Self::HeartbeatBlockMustUseZeroStateRoot => {
                 "Heartbeat block validation failed: heartbeat blocks must use the protocol-defined zero state root."
             }
-            Self::EmptyTaskPayload => {
-                "Task validation failed: task payload must not be empty."
-            }
+            Self::EmptyTaskPayload => "Task validation failed: task payload must not be empty.",
             Self::TaskPayloadTooLarge { .. } => {
                 "Task validation failed: task payload exceeds the maximum permitted size."
             }
@@ -453,9 +451,7 @@ impl BlockError {
             Self::InvalidPreviousHash => {
                 "Chain-link validation failed: previous block hash relationship is invalid."
             }
-            Self::DuplicateTaskId => {
-                "Task validation failed: duplicate task identifier detected."
-            }
+            Self::DuplicateTaskId => "Task validation failed: duplicate task identifier detected.",
             Self::InvalidTimestamp => {
                 "Block validation failed: timestamp is outside protocol-accepted bounds."
             }
@@ -468,9 +464,7 @@ impl BlockError {
             Self::InvalidTaskRoot => {
                 "Block validation failed: task-root commitment is invalid for the requested operation."
             }
-            Self::HashingFailed => {
-                "Hashing operation failed under current protocol constraints."
-            }
+            Self::HashingFailed => "Hashing operation failed under current protocol constraints.",
             Self::SerializationFailed => {
                 "Canonical serialization failed under current protocol constraints."
             }
@@ -594,9 +588,7 @@ impl std::error::Error for BlockError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        BlockError, BlockErrorCategory, BlockErrorClass, BlockErrorSeverity,
-    };
+    use super::{BlockError, BlockErrorCategory, BlockErrorClass, BlockErrorSeverity};
 
     #[test]
     fn symbolic_error_code_is_stable() {

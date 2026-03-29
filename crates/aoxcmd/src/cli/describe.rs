@@ -3,14 +3,14 @@
 // This file is part of the AOXC pre-release codebase.
 
 use crate::{
-    build_info::{build_info, BuildInfo},
+    build_info::{BuildInfo, build_info},
     cli::AOXC_RELEASE_NAME,
-    cli_support::{emit_serialized, output_format, text_envelope, OutputFormat},
+    cli_support::{OutputFormat, emit_serialized, output_format, text_envelope},
     config::{loader::load, settings::Settings},
     data_home::resolve_home,
     error::{AppError, ErrorCode},
     logging::init::trace_for,
-    services::registry::{default_registry, ServiceDescriptor},
+    services::registry::{ServiceDescriptor, default_registry},
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -162,18 +162,14 @@ fn compatibility_matrix() -> CompatibilityMatrix<'static> {
                 EnforcementRule {
                     surface: "vote/certificate format line",
                     expected_version: "AOXC-VOTE-FMT-V1-draft / AOXC-CERT-FMT-V1-draft",
-                    behavior_on_mismatch:
-                        "treat quorum material as incompatible and non-canonical",
+                    behavior_on_mismatch: "treat quorum material as incompatible and non-canonical",
                 },
             ],
         },
         policy: UpgradePolicy {
-            backward_compatibility:
-                "patch releases within the same protocol line must preserve on-disk state and operator CLI automation contracts",
-            rollback_window:
-                "same release line only; protocol-line downgrades require explicit snapshot restore",
-            migration_guarantee:
-                "state migrations must be deterministic, evidence-backed, and coupled with snapshot recovery rehearsal",
+            backward_compatibility: "patch releases within the same protocol line must preserve on-disk state and operator CLI automation contracts",
+            rollback_window: "same release line only; protocol-line downgrades require explicit snapshot restore",
+            migration_guarantee: "state migrations must be deterministic, evidence-backed, and coupled with snapshot recovery rehearsal",
             supported_upgrade_paths: vec![
                 UpgradePath {
                     from: "0.1.1-akdeniz",
@@ -191,8 +187,7 @@ fn compatibility_matrix() -> CompatibilityMatrix<'static> {
                     from: "protocol line N",
                     to: "protocol line N+1",
                     status: "gated",
-                    guarantee:
-                        "requires explicit migration plan, compatibility evidence, and rollback snapshot",
+                    guarantee: "requires explicit migration plan, compatibility evidence, and rollback snapshot",
                 },
             ],
         },
@@ -205,14 +200,12 @@ fn compatibility_matrix() -> CompatibilityMatrix<'static> {
             ValidationTrack {
                 name: "fault injection and partition",
                 status: "scripted",
-                evidence_hint:
-                    "scripts/validation/network_production_closure.sh --scenario partition|delay|drop|restart",
+                evidence_hint: "scripts/validation/network_production_closure.sh --scenario partition|delay|drop|restart",
             },
             ValidationTrack {
                 name: "state sync and snapshot recovery",
                 status: "scripted",
-                evidence_hint:
-                    "scripts/validation/network_production_closure.sh --scenario recovery",
+                evidence_hint: "scripts/validation/network_production_closure.sh --scenario recovery",
             },
             ValidationTrack {
                 name: "soak and telemetry evidence",
@@ -222,14 +215,10 @@ fn compatibility_matrix() -> CompatibilityMatrix<'static> {
         ],
         release_trust_chain: ReleaseTrustChain {
             reproducible_build: "required via scripts/release/generate_release_evidence.sh",
-            artifact_signature:
-                "required via AOXC_SIGNING_CMD or pre-signed artifact injection",
-            provenance_attestation:
-                "required via AOXC_PROVENANCE_CMD or generated placeholder failure",
-            release_evidence_gate:
-                "release bundle is incomplete until checksums, signatures, provenance, and compatibility reports are present",
-            compatibility_matrix:
-                "published by `aoxc compat-matrix --format json` and bundled into release evidence",
+            artifact_signature: "required via AOXC_SIGNING_CMD or pre-signed artifact injection",
+            provenance_attestation: "required via AOXC_PROVENANCE_CMD or generated placeholder failure",
+            release_evidence_gate: "release bundle is incomplete until checksums, signatures, provenance, and compatibility reports are present",
+            compatibility_matrix: "published by `aoxc compat-matrix --format json` and bundled into release evidence",
         },
     }
 }
@@ -356,7 +345,7 @@ pub fn cmd_port_map() -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{compatibility_matrix, effective_settings_for_describe_surface};
-    use crate::test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome};
+    use crate::test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock};
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {
         let _lock = aoxc_home_test_lock();
@@ -370,25 +359,31 @@ mod tests {
         let matrix = compatibility_matrix();
 
         assert_eq!(matrix.protocol.enforcement.len(), 3);
-        assert!(matrix
-            .protocol
-            .enforcement
-            .iter()
-            .any(|rule| rule.surface == "p2p-envelope.protocol_version"));
+        assert!(
+            matrix
+                .protocol
+                .enforcement
+                .iter()
+                .any(|rule| rule.surface == "p2p-envelope.protocol_version")
+        );
     }
 
     #[test]
     fn compatibility_matrix_requires_release_trust_chain_controls() {
         let matrix = compatibility_matrix();
 
-        assert!(matrix
-            .release_trust_chain
-            .artifact_signature
-            .contains("required"));
-        assert!(matrix
-            .network_validation
-            .iter()
-            .any(|track| track.name == "state sync and snapshot recovery"));
+        assert!(
+            matrix
+                .release_trust_chain
+                .artifact_signature
+                .contains("required")
+        );
+        assert!(
+            matrix
+                .network_validation
+                .iter()
+                .any(|track| track.name == "state sync and snapshot recovery")
+        );
     }
 
     #[test]

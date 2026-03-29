@@ -304,8 +304,9 @@ impl Transaction {
     /// validated payload violated canonical bounds through unchecked mutation.
     #[must_use]
     pub fn signing_message(&self) -> Vec<u8> {
-        self.try_signing_message()
-            .expect("transaction signing message construction must operate on canonical payload bounds")
+        self.try_signing_message().expect(
+            "transaction signing message construction must operate on canonical payload bounds",
+        )
     }
 
     /// Verifies the transaction signature against the canonical signing payload.

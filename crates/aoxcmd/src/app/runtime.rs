@@ -6,7 +6,7 @@ use crate::{
     economy::ledger,
     error::AppError,
     node::lifecycle,
-    telemetry::prometheus::{now, persist_metrics, MetricsSnapshot},
+    telemetry::prometheus::{MetricsSnapshot, now, persist_metrics},
 };
 
 /// Refreshes the canonical AOXC runtime metrics snapshot.
@@ -56,10 +56,10 @@ fn build_runtime_metrics_snapshot() -> Result<MetricsSnapshot, AppError> {
 mod tests {
     use super::refresh_runtime_metrics;
     use crate::{
-        economy::ledger::{persist, LedgerState},
+        economy::ledger::{LedgerState, persist},
         node::{lifecycle::persist_state, state::NodeState},
-        telemetry::prometheus::{metrics_path, MetricsSnapshot},
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        telemetry::prometheus::{MetricsSnapshot, metrics_path},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {

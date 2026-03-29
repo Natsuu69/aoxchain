@@ -22,7 +22,7 @@ use crate::{
         loader::{init_default, load, persist},
         settings::Settings,
     },
-    data_home::{ensure_layout, read_file, resolve_home, write_file, ScopedHomeOverride},
+    data_home::{ScopedHomeOverride, ensure_layout, read_file, resolve_home, write_file},
     error::{AppError, ErrorCode},
     keys::manager::{
         bootstrap_operator_key, consensus_public_key_hex, inspect_operator_key,

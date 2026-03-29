@@ -52,7 +52,7 @@ fn effective_settings_for_runtime_context() -> Result<Settings, AppError> {
 #[cfg(test)]
 mod tests {
     use super::runtime_context;
-    use crate::test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome};
+    use crate::test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock};
 
     fn with_test_home<T>(label: &str, test: impl FnOnce(&TestHome) -> T) -> T {
         let _lock = aoxc_home_test_lock();

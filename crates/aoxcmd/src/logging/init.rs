@@ -2,7 +2,7 @@
 // Experimental software under active construction.
 // This file is part of the AOXC pre-release codebase.
 
-use crate::telemetry::tracing::{new_context, TraceContext};
+use crate::telemetry::tracing::{TraceContext, new_context};
 
 const DEFAULT_TRACE_COMMAND: &str = "unknown-command";
 

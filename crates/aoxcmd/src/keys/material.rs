@@ -6,7 +6,7 @@ use crate::error::{AppError, ErrorCode};
 use aoxcore::identity::{
     key_bundle::{CryptoProfile, NodeKeyBundleV1, NodeKeyRole},
     key_engine::KeyEngine,
-    keyfile::{encrypt_key_to_envelope, KeyfileEnvelope},
+    keyfile::{KeyfileEnvelope, encrypt_key_to_envelope},
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -257,7 +257,7 @@ pub fn validate_key_envelope(serialized: &str) -> Result<KeyfileEnvelope, AppErr
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_key_envelope, KeyMaterial};
+    use super::{KeyMaterial, validate_key_envelope};
 
     #[test]
     fn generated_material_uses_canonical_node_key_bundle() {

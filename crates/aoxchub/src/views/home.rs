@@ -1,9 +1,6 @@
 use dioxus::prelude::*;
+#[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
-
-use super::menus::{
-    DashboardSection, DomainSections, OperationsSection, OverviewSection, WalletSetupSection,
-};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct ProfileSnapshot {
@@ -15,6 +12,7 @@ struct ProfileSnapshot {
     validators_path: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct RpcProbe {
     profile: String,
@@ -24,6 +22,7 @@ struct RpcProbe {
     note: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct HubSnapshot {
     generated_at: String,
@@ -33,6 +32,29 @@ struct HubSnapshot {
 
 #[component]
 pub fn Home() -> Element {
+    let wallet_steps = [
+        (
+            "01",
+            "Create operational wallet",
+            "Provision a primary wallet for authenticated access, signing authority, and day-zero onboarding readiness.",
+        ),
+        (
+            "02",
+            "Secure recovery materials",
+            "Back up recovery credentials through an offline and tamper-aware procedure before enabling transactional use.",
+        ),
+        (
+            "03",
+            "Fund execution account",
+            "Provide sufficient native balance for deployment, governance actions, relaying, and operational transaction flow.",
+        ),
+        (
+            "04",
+            "Bind policy controls",
+            "Attach approval paths, transfer policies, and execution constraints to align the wallet with AOXC operational governance.",
+        ),
+    ];
+
     let kpis = [
         ("Network TPS", "42,781", "+18.4%"),
         ("Finality", "480ms", "-12.1%"),
@@ -251,7 +273,9 @@ async fn hub_snapshot() -> Result<HubSnapshot> {
         });
     }
 
+    let client = reqwest::Client::new();
     let mut probes = Vec::with_capacity(profile_snapshots.len());
+
     for profile in &profile_snapshots {
         let url = if profile.rpc_addr.contains(':') {
             format!("http://{}", profile.rpc_addr)
@@ -260,7 +284,6 @@ async fn hub_snapshot() -> Result<HubSnapshot> {
         };
 
         let start = std::time::Instant::now();
-        let client = reqwest::Client::new();
         let outcome = client
             .get(format!("{url}/status"))
             .timeout(std::time::Duration::from_millis(500))
@@ -294,6 +317,7 @@ async fn hub_snapshot() -> Result<HubSnapshot> {
     })
 }
 
+#[allow(dead_code)]
 fn parse_toml_value(content: &str, key: &str) -> Option<String> {
     content.lines().find_map(|line| {
         let trimmed = line.trim();
@@ -301,7 +325,6 @@ fn parse_toml_value(content: &str, key: &str) -> Option<String> {
             return None;
         }
         let (_, raw) = trimmed.split_once('=')?;
-        let value = raw.trim().trim_matches('"').to_string();
-        Some(value)
+        Some(raw.trim().trim_matches('"').to_string())
     })
 }

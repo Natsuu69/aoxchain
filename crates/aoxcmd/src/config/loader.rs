@@ -166,7 +166,7 @@ mod tests {
     use super::*;
     use crate::{
         data_home::{ensure_layout, read_file},
-        test_support::{aoxc_home_test_lock, AoxcHomeGuard, TestHome},
+        test_support::{AoxcHomeGuard, TestHome, aoxc_home_test_lock},
     };
     use serde_json::json;
     use std::path::PathBuf;

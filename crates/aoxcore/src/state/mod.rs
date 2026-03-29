@@ -161,8 +161,8 @@ impl WorldState {
             hash_len_prefixed_bytes(&mut hasher, address);
             hash_len_prefixed_bytes(&mut hasher, &account.nonce.to_le_bytes());
 
-            let capability_bytes =
-                serde_json::to_vec(&account.capability).map_err(|_| WorldStateError::CapabilityEncodingFailed)?;
+            let capability_bytes = serde_json::to_vec(&account.capability)
+                .map_err(|_| WorldStateError::CapabilityEncodingFailed)?;
             hash_len_prefixed_bytes(&mut hasher, &capability_bytes);
 
             hash_len_prefixed_bytes(&mut hasher, &account.energy.to_le_bytes());

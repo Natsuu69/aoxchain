@@ -52,8 +52,8 @@ fn classify_health(state: &crate::node::state::NodeState) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_health, STATUS_BOOTSTRAPPED, STATUS_DEGRADED_KEY_STATE, STATUS_HEALTHY,
-        STATUS_UNINITIALIZED,
+        STATUS_BOOTSTRAPPED, STATUS_DEGRADED_KEY_STATE, STATUS_HEALTHY, STATUS_UNINITIALIZED,
+        classify_health,
     };
     use crate::node::state::NodeState;
 
