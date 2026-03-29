@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 
 use crate::components::glass::GlassSurface;
 use crate::services::consensus_service::read_consensus;
+use crate::services::desktop_readiness_service::read_desktop_readiness;
 use crate::services::execution_service::read_execution_lanes;
 use crate::services::explorer_service::read_explorer;
 use crate::services::governance_service::read_governance;
@@ -16,12 +17,27 @@ use crate::services::treasury_service::read_treasury;
 #[component]
 pub fn Overview() -> Element {
     let data = use_resource(move || async move { read_overview().await });
+    let readiness = use_resource(move || async move { read_desktop_readiness().await });
 
     rsx! {
-        PageShell { title: "Overview", subtitle: "Ana operasyon ekranı: zincirin genel sağlığını tek bakışta gösterir." }
+        PageShell { title: "Overview", subtitle: "Advanced command-center landing page with production RPC, operator automation, and security-aware execution visibility." }
         {
             match data() {
                 Some(model) => rsx! {
+                    GlassSurface { class: Some("p-5 aox-hero".to_string()),
+                        div { class: "aox-hero-grid",
+                            div { class: "space-y-2",
+                                p { class: "aox-kicker", "WELCOME" }
+                                h3 { class: "text-xl font-semibold text-white", "AOXCHUB Next-Gen Admin Dashboard" }
+                                p { class: "text-sm text-slate-200", "Dark-purple glass workspace with RPC-connected widgets, CLI runbooks, and policy-bound operator controls." }
+                            }
+                            div { class: "aox-hero-badges",
+                                span { class: "aox-chip", "RPC Endpoint: {model.source}" }
+                                span { class: "aox-chip aox-chip--good", "Profile: {model.network_profile.title()}" }
+                                span { class: "aox-chip", "Sync: {model.sync_status}" }
+                            }
+                        }
+                    }
                     SourceLabel { source: model.source }
                     GridSection {
                         cards: vec![
@@ -35,6 +51,22 @@ pub fn Overview() -> Element {
                             ("Network Health", model.network_health, "telemetry".to_string()),
                             ("Alerts Summary", model.alerts_summary, "alert stream".to_string()),
                         ]
+                    }
+                    GlassSurface { class: Some("p-5".to_string()),
+                        h3 { class: "text-base font-semibold text-white", "Integrated Operator Commands" }
+                        p { class: "mt-1 text-sm text-slate-300", "Production runbooks for AOXC CLI and Make-based release automation." }
+                        div { class: "mt-3 grid gap-3 md:grid-cols-2",
+                            CommandRow { command: "aoxc telemetry snapshot", purpose: "Read latest RPC telemetry snapshot from configured profile endpoint." }
+                            CommandRow { command: "aoxc explorer block latest", purpose: "Inspect latest finalized block and explorer metadata." }
+                            CommandRow { command: "make test-mainnet-compat", purpose: "Execute compatibility checks for mainnet profile release gate." }
+                            CommandRow { command: "make telemetry-drill", purpose: "Validate transport health and telemetry envelope continuity." }
+                        }
+                    }
+                    {
+                        match readiness() {
+                            Some(readiness_model) => rsx! { DesktopReadinessPanel { model: readiness_model } },
+                            None => rsx! { LoadingBox {} },
+                        }
                     }
                 },
                 None => rsx! { LoadingBox {} },
@@ -376,6 +408,16 @@ fn LineItem(label: &'static str, value: String, source: String) -> Element {
 }
 
 #[component]
+fn CommandRow(command: &'static str, purpose: &'static str) -> Element {
+    rsx! {
+        div { class: "rounded-lg border border-fuchsia-300/20 bg-fuchsia-500/5 px-3 py-3",
+            p { class: "text-xs uppercase tracking-wide text-fuchsia-200", "{command}" }
+            p { class: "mt-1 text-sm text-slate-200", "{purpose}" }
+        }
+    }
+}
+
+#[component]
 fn IntentPanel() -> Element {
     let intents = governance_intents();
 
@@ -420,6 +462,50 @@ fn LoadingBox() -> Element {
     rsx! {
         GlassSurface { class: Some("p-4".to_string()),
             p { class: "text-sm text-slate-400", "Authoritative data source loading..." }
+        }
+    }
+}
+
+#[component]
+fn DesktopReadinessPanel(
+    model: crate::services::desktop_readiness_service::DesktopReadinessModel,
+) -> Element {
+    rsx! {
+        GlassSurface { class: Some("p-5".to_string()),
+            div { class: "space-y-4",
+                div { class: "flex flex-wrap items-start justify-between gap-3",
+                    div { class: "space-y-1",
+                        h3 { class: "text-base font-semibold text-white", "Desktop Readiness Matrix" }
+                        p { class: "text-sm text-slate-300", "Production-grade integration posture for AOXCHUB desktop runtime." }
+                    }
+                    span { class: "rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300", "Integration Grade {model.integration_grade}" }
+                }
+
+                div { class: "grid gap-3 md:grid-cols-3",
+                    LineItem { label: "Profile", value: model.profile.title().to_string(), source: "profile resolver".to_string() }
+                    LineItem { label: "RPC Target", value: model.rpc_target, source: "rpc client".to_string() }
+                    LineItem { label: "Telemetry", value: model.telemetry_status, source: "telemetry service".to_string() }
+                }
+
+                div { class: "grid gap-3 md:grid-cols-2",
+                    div { class: "rounded-xl border border-white/10 bg-white/5 p-4 space-y-2",
+                        h4 { class: "text-sm font-semibold text-white", "Readiness Checks" }
+                        for check in model.checks {
+                            p { class: "text-sm text-slate-200", "{check.name}: {check.status}" }
+                            p { class: "text-xs text-slate-400 mb-2", "{check.evidence}" }
+                        }
+                    }
+                    div { class: "rounded-xl border border-white/10 bg-white/5 p-4 space-y-2",
+                        h4 { class: "text-sm font-semibold text-white", "Security Controls" }
+                        for control in model.controls {
+                            p { class: "text-sm text-slate-200", "{control.control}: {control.state}" }
+                            p { class: "text-xs text-slate-400 mb-2", "{control.policy}" }
+                        }
+                    }
+                }
+
+                p { class: "text-xs text-slate-500", "source: {model.source}" }
+            }
         }
     }
 }
