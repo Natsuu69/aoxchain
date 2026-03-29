@@ -4,16 +4,22 @@ version = "0.1.0"
 authors = ["aoxc <aoxcdao@gmail.com>"]
 edition = "2024"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
 dioxus = { version = "0.7.3", features = ["router", "fullstack"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
 
+
 [features]
 default = ["desktop"]
+# The feature that are only required for the web = ["dioxus/web"] build target should be optional and only enabled in the web = ["dioxus/web"] feature
 web = ["dioxus/web"]
+# The feature that are only required for the desktop = ["dioxus/desktop"] build target should be optional and only enabled in the desktop = ["dioxus/desktop"] feature
 desktop = ["dioxus/desktop"]
+# The feature that are only required for the mobile = ["dioxus/mobile"] build target should be optional and only enabled in the mobile = ["dioxus/mobile"] feature
 mobile = ["dioxus/mobile"]
+# The feature that are only required for the server = ["dioxus/server"] build target should be optional and only enabled in the server = ["dioxus/server"] feature
 server = ["dioxus/server"]
-all-platforms = ["web", "desktop", "mobile", "server"]
