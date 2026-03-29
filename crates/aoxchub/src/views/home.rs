@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+#[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 
 use super::menus::{
@@ -15,6 +16,7 @@ struct ProfileSnapshot {
     validators_path: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct RpcProbe {
     profile: String,
@@ -24,6 +26,7 @@ struct RpcProbe {
     note: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct HubSnapshot {
     generated_at: String,
@@ -294,6 +297,7 @@ async fn hub_snapshot() -> Result<HubSnapshot> {
     })
 }
 
+#[allow(dead_code)]
 fn parse_toml_value(content: &str, key: &str) -> Option<String> {
     content.lines().find_map(|line| {
         let trimmed = line.trim();

@@ -396,4 +396,9 @@ h1 {
   .hero {
     grid-template-columns: 1fr;
   }
+
+  .wallet-create-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
