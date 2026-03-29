@@ -12,7 +12,7 @@ pub fn AdminLayout() -> Element {
             div { class: "aox-main-column",
                 Header {}
 
-                main { class: "aox-workspace",
+                main { class: "aox-workspace aox-notebook",
                     Outlet::<Route> {}
                 }
 

@@ -79,6 +79,7 @@ body {
 }
 
 .aox-nav {
+    margin-top: 1.15rem;
     display: grid;
     gap: 0.62rem;
     margin-top: 1.3rem;
@@ -130,6 +131,8 @@ body {
 }
 
 .aox-header {
+    padding: 1rem 1.35rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.24);
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -176,7 +179,6 @@ body {
     padding: 0.75rem 1.35rem;
     display: flex;
     justify-content: space-between;
-    gap: 0.8rem;
     flex-wrap: wrap;
     color: #9db6dd;
     font-size: 0.74rem;
